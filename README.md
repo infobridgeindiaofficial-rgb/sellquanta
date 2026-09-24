@@ -6,6 +6,10 @@ It runs entirely on your own computer. There is no cloud account and no telemetr
 
 > **Status:** early-stage project. Windows installers built from this repository are currently **unsigned** (see [CODE_SIGNING_POLICY.md](CODE_SIGNING_POLICY.md)), so Windows SmartScreen may show a warning.
 
+## Download
+
+The Windows installer is published on the [Releases page](https://github.com/infobridgeindiaofficial-rgb/sellquanta/releases) and at [infobridgeindia.online/sellquanta/download](https://infobridgeindia.online/sellquanta/download). Each release is built by the `Release` GitHub Actions workflow from this repository's source code.
+
 ## Features
 
 - **Warehouse** – products, warehouse product codes, cost price, opening stock, stock adjustments and low-stock levels.

@@ -1,0 +1,80 @@
+name: Release
+
+# Publishes a GitHub Release when a version tag (for example v1.0.2) is pushed.
+# The installer is built here from the public source code; nothing is built or uploaded from a developer PC.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and publish Windows installer
+    runs-on: windows-latest
+    timeout-minutes: 45
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: "false"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            client/package-lock.json
+
+      - name: Check tag matches package version
+        shell: pwsh
+        run: |
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          if ("v$version" -ne "${{ github.ref_name }}") { throw "Tag ${{ github.ref_name }} does not match package.json version $version" }
+          "VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          npm --prefix client ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build client (production)
+        run: npm --prefix client run build
+
+      - name: Build Windows installer (unsigned)
+        run: npx electron-builder --win nsis --publish never
+
+      - name: Prepare release files
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem release -Filter "*.exe" | Select-Object -First 1
+          $name = "SellQuanta-Setup-$env:VERSION.exe"
+          New-Item -ItemType Directory -Force upload | Out-Null
+          Copy-Item $exe.FullName "upload/$name"
+          $hash = (Get-FileHash -Algorithm SHA256 "upload/$name").Hash.ToLower()
+          "$hash  $name" | Out-File -FilePath "upload/$name.sha256" -Encoding ascii -NoNewline
+          "SHA-256: $hash"
+
+      - name: Publish GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $name = "SellQuanta-Setup-$env:VERSION.exe"
+          $hash = (Get-Content "upload/$name.sha256").Split(" ")[0]
+          $notes = @"
+          SellQuanta $env:VERSION for Windows 10/11 (64-bit).
+
+          Built by GitHub Actions from the public source at commit ${{ github.sha }}.
+
+          SHA-256 ($name): $hash
+
+          The installer is currently unsigned. Windows SmartScreen may display an Unknown Publisher warning.
+          "@
+          gh release create "${{ github.ref_name }}" "upload/$name" "upload/$name.sha256" --title "SellQuanta $env:VERSION" --notes $notes --verify-tag
