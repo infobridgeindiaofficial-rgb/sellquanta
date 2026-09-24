@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self' file:; style-src 'unsafe-inline'; script-src 'unsafe-inline'" />
+<title>SellQuanta</title>
+<style>
+  html, body { height: 100%; margin: 0; }
+  body { display: flex; align-items: center; justify-content: center; background: #F7F7F4; color: #151515;
+         font: 14px/1.5 "Segoe UI", system-ui, sans-serif; user-select: none; }
+  .card { width: 380px; text-align: center; }
+  .brand { display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 28px; }
+  .brand img { width: 44px; height: 44px; border-radius: 8px; }
+  .brand b { font-size: 26px; letter-spacing: -.02em; }
+  .spinner { width: 26px; height: 26px; margin: 0 auto 16px; border-radius: 50%; border: 3px solid #E4E4DF;
+             border-top-color: #2E5E4E; animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #status { color: #555852; min-height: 21px; }
+  #error { display: none; margin-top: 8px; padding: 14px 16px; border: 1px solid #EBC4BD; background: #FBEDEA; color: #A5372B;
+           border-radius: 8px; text-align: left; white-space: pre-wrap; user-select: text; }
+  .actions { display: none; margin-top: 16px; gap: 8px; justify-content: center; }
+  button { font: inherit; padding: 8px 16px; border-radius: 6px; border: 1px solid #D2D2CC; background: #fff; cursor: pointer; }
+  button.primary { background: #2E5E4E; border-color: #2E5E4E; color: #fff; }
+  body.failed .spinner { display: none; }
+  body.failed #error { display: block; }
+  body.failed .actions { display: flex; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="brand"><img src="../client/dist/logo.png" alt="" /><b>SellQuanta</b></div>
+    <div class="spinner"></div>
+    <div id="status">Starting SellQuanta...</div>
+    <div id="error"></div>
+    <div class="actions">
+      <button class="primary" onclick="location.hash = 'retry-' + Date.now()">Try again</button>
+      <button onclick="window.close()">Close</button>
+    </div>
+  </div>
+<script>
+  // Called by the SellQuanta desktop shell (electron/main.cjs) through executeJavaScript; this page has no Node access.
+  window.setStatus = text => { document.body.classList.remove("failed"); document.getElementById("status").textContent = text; };
+  window.setError = text => { document.body.classList.add("failed"); document.getElementById("status").textContent = "SellQuanta could not start";
+                              document.getElementById("error").textContent = text; };
+</script>
+</body>
+</html>

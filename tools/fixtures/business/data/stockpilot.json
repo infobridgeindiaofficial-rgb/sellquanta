@@ -1,0 +1,609 @@
+{
+  "meta": {
+    "version": 1,
+    "createdAt": "2026-09-24T07:20:19.926Z",
+    "lastBackupDate": null
+  },
+  "agents": [
+    {
+      "id": "agent_4fe048c2-d2af-431d-8775-d385228e9fc1",
+      "name": "Asha Demo",
+      "companyId": "co_e5fb2d65-6487-4577-bfb9-d360a6d86994",
+      "active": true,
+      "createdAt": "2026-09-24T07:20:20.146Z"
+    },
+    {
+      "id": "agent_6dac835f-87d2-48ee-b022-83ac587a1024",
+      "name": "Ravi Sample",
+      "companyId": "co_73074d08-d083-43f4-a41e-ba95c189fd24",
+      "active": true,
+      "createdAt": "2026-09-24T07:20:20.151Z"
+    },
+    {
+      "id": "agent_5864c498-6494-47c5-a24c-5575529ac9fa",
+      "name": "Meera Example",
+      "companyId": "co_117c2edb-2809-44e5-b037-171e3b1cb51b",
+      "active": true,
+      "createdAt": "2026-09-24T07:20:20.154Z"
+    }
+  ],
+  "accounts": [
+    {
+      "id": "acct_5eed52e9-3f98-480d-b4c0-d13ef3f0c75c",
+      "agentId": "agent_4fe048c2-d2af-431d-8775-d385228e9fc1",
+      "marketplace": "Amazon",
+      "name": "Asha Demo - Amazon",
+      "active": true
+    },
+    {
+      "id": "acct_66d2594f-024d-4abb-a6d4-d019ca130472",
+      "agentId": "agent_4fe048c2-d2af-431d-8775-d385228e9fc1",
+      "marketplace": "Flipkart",
+      "name": "Asha Demo - Flipkart",
+      "active": true
+    },
+    {
+      "id": "acct_f67f16f1-7dbf-43a7-a90c-6461dcfbd9e7",
+      "agentId": "agent_4fe048c2-d2af-431d-8775-d385228e9fc1",
+      "marketplace": "Meesho",
+      "name": "Asha Demo - Meesho",
+      "active": true
+    },
+    {
+      "id": "acct_eb75c68b-f90d-443e-816c-7b2224cf2680",
+      "agentId": "agent_6dac835f-87d2-48ee-b022-83ac587a1024",
+      "marketplace": "Amazon",
+      "name": "Ravi Sample - Amazon",
+      "active": true
+    },
+    {
+      "id": "acct_4ffb7b68-39a0-4726-beea-457375981d7c",
+      "agentId": "agent_6dac835f-87d2-48ee-b022-83ac587a1024",
+      "marketplace": "Flipkart",
+      "name": "Ravi Sample - Flipkart",
+      "active": true
+    },
+    {
+      "id": "acct_453f8de7-6f36-4c36-82ed-ac3e715fbef3",
+      "agentId": "agent_6dac835f-87d2-48ee-b022-83ac587a1024",
+      "marketplace": "Meesho",
+      "name": "Ravi Sample - Meesho",
+      "active": true
+    },
+    {
+      "id": "acct_d8c6584b-ba28-4e10-8181-108081960a6e",
+      "agentId": "agent_5864c498-6494-47c5-a24c-5575529ac9fa",
+      "marketplace": "Amazon",
+      "name": "Meera Example - Amazon",
+      "active": true
+    },
+    {
+      "id": "acct_432d02cc-2c33-42e4-a94d-1a1387ec352f",
+      "agentId": "agent_5864c498-6494-47c5-a24c-5575529ac9fa",
+      "marketplace": "Flipkart",
+      "name": "Meera Example - Flipkart",
+      "active": true
+    },
+    {
+      "id": "acct_114d1594-38c6-4a87-952c-3a2652e5a36b",
+      "agentId": "agent_5864c498-6494-47c5-a24c-5575529ac9fa",
+      "marketplace": "Meesho",
+      "name": "Meera Example - Meesho",
+      "active": true
+    }
+  ],
+  "companies": [
+    {
+      "id": "co_e5fb2d65-6487-4577-bfb9-d360a6d86994",
+      "name": "Demo Traders",
+      "createdAt": "2026-09-24T07:20:20.134Z"
+    },
+    {
+      "id": "co_73074d08-d083-43f4-a41e-ba95c189fd24",
+      "name": "Sample Mart",
+      "createdAt": "2026-09-24T07:20:20.138Z"
+    },
+    {
+      "id": "co_117c2edb-2809-44e5-b037-171e3b1cb51b",
+      "name": "Example Stores",
+      "createdAt": "2026-09-24T07:20:20.143Z"
+    }
+  ],
+  "products": [
+    {
+      "id": "prod_a73add1a-3577-4747-875e-4c104f67647f",
+      "sku": "PRD-01",
+      "name": "Sev maker",
+      "costPrice": 120,
+      "stock": 39,
+      "image": "",
+      "lowStockLevel": 5,
+      "createdAt": "2026-09-24T07:20:20.159Z"
+    },
+    {
+      "id": "prod_ac9c05d3-c14e-48f8-8aa5-61607401a06a",
+      "sku": "PRD-25",
+      "name": "Water bottle",
+      "costPrice": 80,
+      "stock": 59,
+      "image": "",
+      "lowStockLevel": 5,
+      "createdAt": "2026-09-24T07:20:20.164Z"
+    },
+    {
+      "id": "prod_91a9a7a4-bc1c-4e4e-bb4d-43d8db0ce180",
+      "sku": "PRD-40",
+      "name": "Glass jar",
+      "costPrice": 150,
+      "stock": 32,
+      "image": "",
+      "lowStockLevel": 5,
+      "createdAt": "2026-09-24T07:20:20.168Z"
+    },
+    {
+      "id": "prod_a1fb572c-5be8-4069-b6a9-1d994f1c0b08",
+      "sku": "PRD-41",
+      "name": "Tea container",
+      "costPrice": 95,
+      "stock": 50,
+      "image": "",
+      "lowStockLevel": 5,
+      "createdAt": "2026-09-24T07:20:20.171Z"
+    }
+  ],
+  "productMaster": [
+    {
+      "id": "pm_bbf0beb8-31bd-42db-ae9e-9a863aa54501",
+      "companyId": "co_e5fb2d65-6487-4577-bfb9-d360a6d86994",
+      "marketplace": "Amazon",
+      "marketplaceSku": "JAR21402",
+      "productId": "prod_91a9a7a4-bc1c-4e4e-bb4d-43d8db0ce180",
+      "productName": "Glass jar",
+      "createdAt": "2026-09-24T07:20:20.175Z"
+    },
+    {
+      "id": "pm_0b4c4389-a5aa-4c72-af08-31e32ef19f79",
+      "companyId": "co_e5fb2d65-6487-4577-bfb9-d360a6d86994",
+      "marketplace": "Flipkart",
+      "marketplaceSku": "BTL14004",
+      "productId": "prod_ac9c05d3-c14e-48f8-8aa5-61607401a06a",
+      "productName": "Water bottle",
+      "createdAt": "2026-09-24T07:20:20.179Z"
+    },
+    {
+      "id": "pm_826b5de0-58c0-49b2-90a1-3683f3e8ae41",
+      "companyId": "co_e5fb2d65-6487-4577-bfb9-d360a6d86994",
+      "marketplace": "Flipkart",
+      "marketplaceSku": "SEV14002",
+      "productId": "prod_a73add1a-3577-4747-875e-4c104f67647f",
+      "productName": "Sev maker",
+      "createdAt": "2026-09-24T07:20:20.182Z"
+    },
+    {
+      "id": "pm_72893606-5a5d-4a5d-97ac-19f91dcd2030",
+      "companyId": "co_73074d08-d083-43f4-a41e-ba95c189fd24",
+      "marketplace": "Flipkart",
+      "marketplaceSku": "BTL14004",
+      "productId": "prod_ac9c05d3-c14e-48f8-8aa5-61607401a06a",
+      "productName": "Water bottle",
+      "createdAt": "2026-09-24T07:20:20.185Z"
+    },
+    {
+      "id": "pm_3a74cd45-bdf2-4771-9418-81141051d8db",
+      "companyId": "co_73074d08-d083-43f4-a41e-ba95c189fd24",
+      "marketplace": "Flipkart",
+      "marketplaceSku": "SEV14002",
+      "productId": "prod_a73add1a-3577-4747-875e-4c104f67647f",
+      "productName": "Sev maker",
+      "createdAt": "2026-09-24T07:20:20.187Z"
+    },
+    {
+      "id": "pm_5fb3f439-e085-4dbd-8fad-e08fe6bbc8c9",
+      "companyId": "co_73074d08-d083-43f4-a41e-ba95c189fd24",
+      "marketplace": "Meesho",
+      "marketplaceSku": "tst01-SkuA00000001",
+      "productId": "prod_a73add1a-3577-4747-875e-4c104f67647f",
+      "productName": "Sev maker",
+      "createdAt": "2026-09-24T07:20:20.190Z"
+    },
+    {
+      "id": "pm_79d84175-e861-4e71-a5c2-b498a0ee760a",
+      "companyId": "co_117c2edb-2809-44e5-b037-171e3b1cb51b",
+      "marketplace": "Flipkart",
+      "marketplaceSku": "SEV14002",
+      "productId": "prod_a73add1a-3577-4747-875e-4c104f67647f",
+      "productName": "Sev maker",
+      "createdAt": "2026-09-24T07:20:20.193Z"
+    },
+    {
+      "id": "pm_f86fd6e2-eae0-47ec-8a07-b770cf9c18a4",
+      "companyId": "co_117c2edb-2809-44e5-b037-171e3b1cb51b",
+      "marketplace": "Meesho",
+      "marketplaceSku": "tst01-SkuA00000001",
+      "productId": "prod_a73add1a-3577-4747-875e-4c104f67647f",
+      "productName": "Sev maker",
+      "createdAt": "2026-09-24T07:20:20.195Z"
+    },
+    {
+      "id": "pm_205e2c5a-09fa-4c15-b811-f7e529565f0e",
+      "companyId": "co_117c2edb-2809-44e5-b037-171e3b1cb51b",
+      "marketplace": "Amazon",
+      "marketplaceSku": "BAG-TOTE-MULTI-001",
+      "productId": "prod_a1fb572c-5be8-4069-b6a9-1d994f1c0b08",
+      "productName": "Tea container",
+      "createdAt": "2026-09-24T07:20:20.198Z"
+    }
+  ],
+  "todaySales": [],
+  "salesHistory": [
+    {
+      "id": "sale_fe10a0e2-5e6b-4497-b2d8-7be096df200a",
+      "batchId": "batch_20260924_462804f9-41e7-49b4-8c6d-584cd7d11496",
+      "date": "2026-09-24",
+      "agentId": "agent_4fe048c2-d2af-431d-8775-d385228e9fc1",
+      "agentName": "Asha Demo",
+      "companyId": "co_e5fb2d65-6487-4577-bfb9-d360a6d86994",
+      "companyName": "Demo Traders",
+      "accountId": "acct_5eed52e9-3f98-480d-b4c0-d13ef3f0c75c",
+      "marketplace": "Amazon",
+      "marketplaceSku": "JAR21402",
+      "productId": "prod_91a9a7a4-bc1c-4e4e-bb4d-43d8db0ce180",
+      "sku": "PRD-40",
+      "warehouseProductCode": "PRD-40",
+      "productName": "Glass jar",
+      "qty": 1,
+      "saleAmount": 299,
+      "profit": null,
+      "unitCost": 150,
+      "costTotal": 150,
+      "orderId": "401-0000001-0000102",
+      "trackingId": "",
+      "source": "manual",
+      "createdAt": "2026-09-24T07:20:20.223Z",
+      "archivedAt": "2026-09-24T07:20:20.236Z"
+    },
+    {
+      "id": "sale_bb45ab34-a55d-4880-a47b-6ba45ab93c1b",
+      "batchId": "batch_20260924_462804f9-41e7-49b4-8c6d-584cd7d11496",
+      "date": "2026-09-24",
+      "agentId": "agent_6dac835f-87d2-48ee-b022-83ac587a1024",
+      "agentName": "Ravi Sample",
+      "companyId": "co_73074d08-d083-43f4-a41e-ba95c189fd24",
+      "companyName": "Sample Mart",
+      "accountId": "acct_4ffb7b68-39a0-4726-beea-457375981d7c",
+      "marketplace": "Flipkart",
+      "marketplaceSku": "SEV14002",
+      "productId": "prod_a73add1a-3577-4747-875e-4c104f67647f",
+      "sku": "PRD-01",
+      "warehouseProductCode": "PRD-01",
+      "productName": "Sev maker",
+      "qty": 1,
+      "saleAmount": 210,
+      "profit": null,
+      "unitCost": 120,
+      "costTotal": 120,
+      "orderId": "OD900000000000000102",
+      "trackingId": "",
+      "source": "manual",
+      "createdAt": "2026-09-24T07:20:20.223Z",
+      "archivedAt": "2026-09-24T07:20:20.236Z"
+    },
+    {
+      "id": "sale_2fac4f2d-b6f1-456d-8b5f-c9158128a465",
+      "batchId": "batch_20260924_462804f9-41e7-49b4-8c6d-584cd7d11496",
+      "date": "2026-09-24",
+      "agentId": "agent_5864c498-6494-47c5-a24c-5575529ac9fa",
+      "agentName": "Meera Example",
+      "companyId": "co_117c2edb-2809-44e5-b037-171e3b1cb51b",
+      "companyName": "Example Stores",
+      "accountId": "acct_114d1594-38c6-4a87-952c-3a2652e5a36b",
+      "marketplace": "Meesho",
+      "marketplaceSku": "tst01-SkuA00000001",
+      "productId": "prod_a73add1a-3577-4747-875e-4c104f67647f",
+      "sku": "PRD-01",
+      "warehouseProductCode": "PRD-01",
+      "productName": "Sev maker",
+      "qty": 1,
+      "saleAmount": 205,
+      "profit": null,
+      "unitCost": 120,
+      "costTotal": 120,
+      "orderId": "990000000000000101_1",
+      "trackingId": "",
+      "source": "manual",
+      "createdAt": "2026-09-24T07:20:20.223Z",
+      "archivedAt": "2026-09-24T07:20:20.236Z"
+    }
+  ],
+  "ledger": [
+    {
+      "id": "led_da80914b-ecf7-477b-bdc5-a08a64467258",
+      "date": "2026-09-24",
+      "agentId": "agent_4fe048c2-d2af-431d-8775-d385228e9fc1",
+      "type": "SALE",
+      "amount": 150,
+      "costBasis": true,
+      "referenceId": "sale_fe10a0e2-5e6b-4497-b2d8-7be096df200a",
+      "note": "Amazon sale 401-0000001-0000102",
+      "createdAt": "2026-09-24T07:20:20.223Z"
+    },
+    {
+      "id": "led_31f58e19-d4b0-41f8-b472-5060d095fa7e",
+      "date": "2026-09-24",
+      "agentId": "agent_6dac835f-87d2-48ee-b022-83ac587a1024",
+      "type": "SALE",
+      "amount": 120,
+      "costBasis": true,
+      "referenceId": "sale_bb45ab34-a55d-4880-a47b-6ba45ab93c1b",
+      "note": "Flipkart sale OD900000000000000102",
+      "createdAt": "2026-09-24T07:20:20.223Z"
+    },
+    {
+      "id": "led_f5bb60cf-7ed1-48c2-85e5-e26f3401bb40",
+      "date": "2026-09-24",
+      "agentId": "agent_5864c498-6494-47c5-a24c-5575529ac9fa",
+      "type": "SALE",
+      "amount": 120,
+      "costBasis": true,
+      "referenceId": "sale_2fac4f2d-b6f1-456d-8b5f-c9158128a465",
+      "note": "Meesho sale 990000000000000101_1",
+      "createdAt": "2026-09-24T07:20:20.223Z"
+    },
+    {
+      "id": "led_8286ccb2-27e7-42fb-8f43-1760b28956da",
+      "date": "2026-09-24",
+      "agentId": "agent_6dac835f-87d2-48ee-b022-83ac587a1024",
+      "type": "SALE",
+      "kind": "REFUND_REVERSAL",
+      "amount": -210,
+      "costBasis": true,
+      "referenceId": "refund_6e701d7b-49de-450f-acc4-496d919e752f",
+      "refundId": "refund_6e701d7b-49de-450f-acc4-496d919e752f",
+      "note": "Refund reversal OD900000000000000102",
+      "createdAt": "2026-09-24T07:20:20.242Z"
+    },
+    {
+      "id": "led_dbf6414c-224a-4d53-8e47-ff6b6472c472",
+      "date": "2026-09-24",
+      "agentId": "agent_4fe048c2-d2af-431d-8775-d385228e9fc1",
+      "type": "PAYMENT",
+      "amount": 50,
+      "note": "Agent payment",
+      "createdAt": "2026-09-24T07:20:20.245Z"
+    }
+  ],
+  "stockMovements": [
+    {
+      "id": "mov_288660c4-fee4-4668-830c-2bb8b8e6aae6",
+      "date": "2026-09-24",
+      "productId": "prod_a73add1a-3577-4747-875e-4c104f67647f",
+      "type": "OPENING",
+      "qty": 40,
+      "note": "Opening stock"
+    },
+    {
+      "id": "mov_80c2d308-24fc-4d87-9513-62f4f1ec6a8d",
+      "date": "2026-09-24",
+      "productId": "prod_ac9c05d3-c14e-48f8-8aa5-61607401a06a",
+      "type": "OPENING",
+      "qty": 60,
+      "note": "Opening stock"
+    },
+    {
+      "id": "mov_1a30c439-fa66-4aa5-a88b-cf99cdedea59",
+      "date": "2026-09-24",
+      "productId": "prod_91a9a7a4-bc1c-4e4e-bb4d-43d8db0ce180",
+      "type": "OPENING",
+      "qty": 35,
+      "note": "Opening stock"
+    },
+    {
+      "id": "mov_7e842aef-0593-4613-87a0-5007940ddad9",
+      "date": "2026-09-24",
+      "productId": "prod_a1fb572c-5be8-4069-b6a9-1d994f1c0b08",
+      "type": "OPENING",
+      "qty": 50,
+      "note": "Opening stock"
+    },
+    {
+      "id": "mov_07fc9d7d-e056-4669-af64-31b29b7d9041",
+      "date": "2026-09-24",
+      "productId": "prod_91a9a7a4-bc1c-4e4e-bb4d-43d8db0ce180",
+      "type": "SALE",
+      "qty": -2,
+      "agentId": "agent_4fe048c2-d2af-431d-8775-d385228e9fc1",
+      "saleId": "sale_3516ca43-3ddd-419b-8963-3aef222b25df",
+      "note": "Amazon 401-0000001-0000101"
+    },
+    {
+      "id": "mov_755b9c75-e306-4fba-89cf-6793fd7f980c",
+      "date": "2026-09-24",
+      "productId": "prod_ac9c05d3-c14e-48f8-8aa5-61607401a06a",
+      "type": "SALE",
+      "qty": -1,
+      "agentId": "agent_6dac835f-87d2-48ee-b022-83ac587a1024",
+      "saleId": "sale_2656b2f4-cd4e-4878-beb4-8ee820c97d00",
+      "note": "Flipkart OD900000000000000101"
+    },
+    {
+      "id": "mov_d0ce95d4-9926-45a8-a833-b500a14e9909",
+      "date": "2026-09-24",
+      "productId": "prod_91a9a7a4-bc1c-4e4e-bb4d-43d8db0ce180",
+      "type": "SALE",
+      "qty": -1,
+      "agentId": "agent_4fe048c2-d2af-431d-8775-d385228e9fc1",
+      "saleId": "sale_fe10a0e2-5e6b-4497-b2d8-7be096df200a",
+      "note": "Amazon 401-0000001-0000102"
+    },
+    {
+      "id": "mov_32cac7f4-8be9-4ac7-bea1-15275bb4f046",
+      "date": "2026-09-24",
+      "productId": "prod_a73add1a-3577-4747-875e-4c104f67647f",
+      "type": "SALE",
+      "qty": -1,
+      "agentId": "agent_6dac835f-87d2-48ee-b022-83ac587a1024",
+      "saleId": "sale_bb45ab34-a55d-4880-a47b-6ba45ab93c1b",
+      "note": "Flipkart OD900000000000000102"
+    },
+    {
+      "id": "mov_0d5c7592-fec2-448b-8cd9-429c2958b9ba",
+      "date": "2026-09-24",
+      "productId": "prod_a73add1a-3577-4747-875e-4c104f67647f",
+      "type": "SALE",
+      "qty": -1,
+      "agentId": "agent_5864c498-6494-47c5-a24c-5575529ac9fa",
+      "saleId": "sale_2fac4f2d-b6f1-456d-8b5f-c9158128a465",
+      "note": "Meesho 990000000000000101_1"
+    },
+    {
+      "id": "mov_9179d317-632c-49d4-b319-34d011d3b605",
+      "date": "2026-09-24",
+      "productId": "prod_a73add1a-3577-4747-875e-4c104f67647f",
+      "type": "REFUND",
+      "qty": 1,
+      "agentId": "agent_6dac835f-87d2-48ee-b022-83ac587a1024",
+      "saleId": "sale_bb45ab34-a55d-4880-a47b-6ba45ab93c1b",
+      "refundId": "refund_6e701d7b-49de-450f-acc4-496d919e752f",
+      "note": "Refund OD900000000000000102"
+    }
+  ],
+  "refunds": [
+    {
+      "id": "refund_6e701d7b-49de-450f-acc4-496d919e752f",
+      "refundedAt": "2026-09-24T07:20:20.242Z",
+      "refundDate": "2026-09-24",
+      "saleId": "sale_bb45ab34-a55d-4880-a47b-6ba45ab93c1b",
+      "saleDate": "2026-09-24",
+      "saleAt": "2026-09-24T07:20:20.223Z",
+      "orderId": "OD900000000000000102",
+      "companyId": "co_73074d08-d083-43f4-a41e-ba95c189fd24",
+      "companyName": "Sample Mart",
+      "agentId": "agent_6dac835f-87d2-48ee-b022-83ac587a1024",
+      "agentName": "Ravi Sample",
+      "accountId": "acct_4ffb7b68-39a0-4726-beea-457375981d7c",
+      "marketplace": "Flipkart",
+      "marketplaceSku": "SEV14002",
+      "productId": "prod_a73add1a-3577-4747-875e-4c104f67647f",
+      "warehouseProductCode": "PRD-01",
+      "productName": "Sev maker",
+      "qty": 1,
+      "refundAmount": 210,
+      "costAmount": 120,
+      "dueReversalAmount": 210
+    }
+  ],
+  "monthCloseArchive": [
+    {
+      "id": "close_49619f4f-5df0-4fe6-a4a4-fab6dcfb9cd9",
+      "closedAt": "2026-09-24T07:20:20.219Z",
+      "label": "Sample closed month",
+      "sales": [
+        {
+          "id": "sale_3516ca43-3ddd-419b-8963-3aef222b25df",
+          "batchId": "batch_20260924_5b4fb376-652e-4305-b372-8fae3a33317b",
+          "date": "2026-09-24",
+          "agentId": "agent_4fe048c2-d2af-431d-8775-d385228e9fc1",
+          "agentName": "Asha Demo",
+          "companyId": "co_e5fb2d65-6487-4577-bfb9-d360a6d86994",
+          "companyName": "Demo Traders",
+          "accountId": "acct_5eed52e9-3f98-480d-b4c0-d13ef3f0c75c",
+          "marketplace": "Amazon",
+          "marketplaceSku": "JAR21402",
+          "productId": "prod_91a9a7a4-bc1c-4e4e-bb4d-43d8db0ce180",
+          "sku": "PRD-40",
+          "warehouseProductCode": "PRD-40",
+          "productName": "Glass jar",
+          "qty": 2,
+          "saleAmount": 598,
+          "profit": null,
+          "unitCost": 150,
+          "costTotal": 300,
+          "orderId": "401-0000001-0000101",
+          "trackingId": "",
+          "source": "manual",
+          "createdAt": "2026-09-24T07:20:20.206Z"
+        },
+        {
+          "id": "sale_2656b2f4-cd4e-4878-beb4-8ee820c97d00",
+          "batchId": "batch_20260924_5b4fb376-652e-4305-b372-8fae3a33317b",
+          "date": "2026-09-24",
+          "agentId": "agent_6dac835f-87d2-48ee-b022-83ac587a1024",
+          "agentName": "Ravi Sample",
+          "companyId": "co_73074d08-d083-43f4-a41e-ba95c189fd24",
+          "companyName": "Sample Mart",
+          "accountId": "acct_4ffb7b68-39a0-4726-beea-457375981d7c",
+          "marketplace": "Flipkart",
+          "marketplaceSku": "BTL14004",
+          "productId": "prod_ac9c05d3-c14e-48f8-8aa5-61607401a06a",
+          "sku": "PRD-25",
+          "warehouseProductCode": "PRD-25",
+          "productName": "Water bottle",
+          "qty": 1,
+          "saleAmount": 120,
+          "profit": null,
+          "unitCost": 80,
+          "costTotal": 80,
+          "orderId": "OD900000000000000101",
+          "trackingId": "",
+          "source": "manual",
+          "createdAt": "2026-09-24T07:20:20.206Z"
+        }
+      ],
+      "ledger": [
+        {
+          "id": "led_783a5e8f-eb24-41d6-b0dd-a757d2c6b7ac",
+          "date": "2026-09-24",
+          "agentId": "agent_4fe048c2-d2af-431d-8775-d385228e9fc1",
+          "type": "SALE",
+          "amount": 300,
+          "costBasis": true,
+          "referenceId": "sale_3516ca43-3ddd-419b-8963-3aef222b25df",
+          "note": "Amazon sale 401-0000001-0000101",
+          "createdAt": "2026-09-24T07:20:20.206Z"
+        },
+        {
+          "id": "led_150a10c8-8688-4cff-a38b-5d33c1c1548f",
+          "date": "2026-09-24",
+          "agentId": "agent_6dac835f-87d2-48ee-b022-83ac587a1024",
+          "type": "SALE",
+          "amount": 80,
+          "costBasis": true,
+          "referenceId": "sale_2656b2f4-cd4e-4878-beb4-8ee820c97d00",
+          "note": "Flipkart sale OD900000000000000101",
+          "createdAt": "2026-09-24T07:20:20.206Z"
+        },
+        {
+          "id": "led_af7cd93c-1259-4f2c-830b-20c4d8d8020a",
+          "date": "2026-09-24",
+          "agentId": "agent_4fe048c2-d2af-431d-8775-d385228e9fc1",
+          "type": "PAYMENT",
+          "amount": 100,
+          "note": "Agent payment",
+          "createdAt": "2026-09-24T07:20:20.209Z"
+        }
+      ],
+      "agentSummary": [
+        {
+          "agentId": "agent_4fe048c2-d2af-431d-8775-d385228e9fc1",
+          "agentName": "Asha Demo",
+          "companyId": "co_e5fb2d65-6487-4577-bfb9-d360a6d86994",
+          "companyName": "Demo Traders",
+          "due": 300,
+          "paid": 100,
+          "balance": 200
+        },
+        {
+          "agentId": "agent_6dac835f-87d2-48ee-b022-83ac587a1024",
+          "agentName": "Ravi Sample",
+          "companyId": "co_73074d08-d083-43f4-a41e-ba95c189fd24",
+          "companyName": "Sample Mart",
+          "due": 80,
+          "paid": 0,
+          "balance": 80
+        }
+      ],
+      "file": "backups/month-close/close_49619f4f-5df0-4fe6-a4a4-fab6dcfb9cd9.json"
+    }
+  ],
+  "walletResets": []
+}

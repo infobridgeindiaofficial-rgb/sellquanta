@@ -1,0 +1,156 @@
+[
+  {
+    "file": "Sub_Order_Labels_00000001-0000-4000-8000-000000000001.pdf",
+    "lines": [
+      "Product Details",
+      "SKU Size Qty Color Order No.",
+      "tst01-SkuA00000001 Free Size 1 Silver 330000000000000006_1",
+      "TAX INVOICE Original For Recipient",
+      "Description HSN Qty Gross Amount Discount Taxable Value Taxes Total",
+      "Stainless Steel Idiyappam",
+      "Maker / Sev Maker with 6 SGST @2.5% :Rs.8.67",
+      "732393 1 Rs.378.00 Rs.14.00 Rs.346.66 Rs.364.00",
+      "Interchangeable Plates & CGST @2.5% :Rs.8.67",
+      "Hand Crank - Free Size",
+      "SGST @2.5% :Rs.0.12",
+      "Other Charges 732393 NA Rs.5.00 Rs.0 Rs.4.76 Rs.5.00",
+      "CGST @2.5% :Rs.0.12",
+      "Total Rs.17.58 Rs.369.00"
+    ]
+  },
+  {
+    "file": "Sub_Order_Labels_00000002-0000-4000-8000-000000000002.pdf",
+    "lines": [
+      "Product Details",
+      "SKU Size Qty Color Order No.",
+      "tst01-SkuA00000001 Free Size 1 Silver 330000000000000001_1",
+      "TAX INVOICE Original For Recipient",
+      "Description HSN Qty Gross Amount Discount Taxable Value Taxes Total",
+      "Stainless Steel Idiyappam",
+      "Maker / Sev Maker with 6 IGST @5.0%",
+      "732393 1 Rs.334.13 Rs.0.00 Rs.318.22 Rs.334.13",
+      "Interchangeable Plates & Rs.15.91",
+      "Hand Crank - Free Size",
+      "IGST @5.0%",
+      "Other Charges 732393 NA Rs.10.00 Rs.0 Rs.9.52 Rs.10.00",
+      "Rs.0.48",
+      "Total Rs.16.39 Rs.344.13"
+    ]
+  },
+  {
+    "file": "Sub_Order_Labels_00000003-0000-4000-8000-000000000003 - Copy.pdf",
+    "lines": [
+      "Product Details",
+      "SKU Size Qty Color Order No.",
+      "tst01-SkuA00000002 Free Size 1 Silver 330000000000000004_1",
+      "TAX INVOICE Original For Recipient",
+      "Description HSN Qty Gross Amount Discount Taxable Value Taxes Total",
+      "Premium 600ml Stainless",
+      "Steel Airtight Kitchen Storage IGST @18.0%",
+      "732393 1 Rs.229.74 Rs.0.00 Rs.194.69 Rs.229.74",
+      "Container with Transparent Rs.35.05",
+      "Window - Free Size",
+      "IGST @18.0%",
+      "Other Charges 732393 NA Rs.19.00 Rs.0 Rs.16.10 Rs.19.00",
+      "Rs.2.90",
+      "Total Rs.37.95 Rs.248.74"
+    ]
+  },
+  {
+    "file": "Sub_Order_Labels_00000003-0000-4000-8000-000000000003.pdf",
+    "lines": [
+      "Product Details",
+      "SKU Size Qty Color Order No.",
+      "tst01-SkuA00000002 Free Size 1 Silver 330000000000000004_1",
+      "TAX INVOICE Original For Recipient",
+      "Description HSN Qty Gross Amount Discount Taxable Value Taxes Total",
+      "Premium 600ml Stainless",
+      "Steel Airtight Kitchen Storage IGST @18.0%",
+      "732393 1 Rs.229.74 Rs.0.00 Rs.194.69 Rs.229.74",
+      "Container with Transparent Rs.35.05",
+      "Window - Free Size",
+      "IGST @18.0%",
+      "Other Charges 732393 NA Rs.19.00 Rs.0 Rs.16.10 Rs.19.00",
+      "Rs.2.90",
+      "Total Rs.37.95 Rs.248.74"
+    ]
+  },
+  {
+    "file": "Sub_Order_Labels_00000004-0000-4000-8000-000000000004.pdf",
+    "lines": [
+      "Product Details",
+      "SKU Size Qty Color Order No.",
+      "tst01-SkuA00000001 Free Size 1 Silver 330000000000000005_1",
+      "TAX INVOICE Original For Recipient",
+      "Description HSN Qty Gross Amount Discount Taxable Value Taxes Total",
+      "Stainless Steel Idiyappam",
+      "Maker / Sev Maker with 6 IGST @5.0%",
+      "732393 1 Rs.333.28 Rs.0.00 Rs.317.41 Rs.333.28",
+      "Interchangeable Plates & Rs.15.87",
+      "Hand Crank - Free Size",
+      "IGST @5.0%",
+      "Other Charges 732393 NA Rs.5.00 Rs.0 Rs.4.76 Rs.5.00",
+      "Rs.0.24",
+      "Total Rs.16.11 Rs.338.28"
+    ]
+  },
+  {
+    "file": "Sub_Order_Labels_00000005-0000-4000-8000-000000000005.pdf",
+    "lines": [
+      "Product Details",
+      "SKU Size Qty Color Order No.",
+      "tst01-SkuA00000001 Free Size 1 Silver 330000000000000007_1",
+      "TAX INVOICE Original For Recipient",
+      "Description HSN Qty Gross Amount Discount Taxable Value Taxes Total",
+      "Stainless Steel Idiyappam",
+      "Maker / Sev Maker with 6 IGST @5.0%",
+      "732393 1 Rs.336.10 Rs.5.00 Rs.315.33 Rs.331.10",
+      "Interchangeable Plates & Rs.15.77",
+      "Hand Crank - Free Size",
+      "IGST @5.0%",
+      "Other Charges 732393 NA Rs.5.00 Rs.0 Rs.4.76 Rs.5.00",
+      "Rs.0.24",
+      "Total Rs.16.01 Rs.336.10"
+    ]
+  },
+  {
+    "file": "Sub_Order_Labels_00000006-0000-4000-8000-000000000006 (1).pdf",
+    "lines": [
+      "Product Details",
+      "SKU Size Qty Color Order No.",
+      "tst01-SkuA00000003 Free Size 1 NA 330000000000000002_1",
+      "TAX INVOICE Original For Recipient",
+      "Description HSN Qty Gross Amount Discount Taxable Value Taxes Total",
+      "Wooden Nit Removal Hair",
+      "Comb –Handmade Fine",
+      "IGST @5.0%",
+      "Tooth Lice & Nit Cleaning 961590 1 Rs.203.00 Rs.0.00 Rs.193.33 Rs.203.00",
+      "Rs.9.67",
+      "Comb for Men, Women &",
+      "Kids - Free Size",
+      "IGST @5.0%",
+      "Other Charges 961590 NA Rs.5.00 Rs.0 Rs.4.76 Rs.5.00",
+      "Rs.0.24",
+      "Total Rs.9.91 Rs.208.00"
+    ]
+  },
+  {
+    "file": "Sub_Order_Labels_00000007-0000-4000-8000-000000000007.pdf",
+    "lines": [
+      "Product Details",
+      "SKU Size Qty Color Order No.",
+      "tst01-SkuA00000004 Free Size 1 NA 330000000000000008_1",
+      "TAX INVOICE Original For Recipient",
+      "Description HSN Qty Gross Amount Discount Taxable Value Taxes Total",
+      "Wooden Nit Removal Hair",
+      "Comb | Handmade Fine IGST @5.0%",
+      "96159000 1 Rs.170.53 Rs.25.00 Rs.138.60 Rs.145.53",
+      "Tooth Lice & Nits Comb - Rs.6.93",
+      "Free Size",
+      "IGST @5.0%",
+      "Other Charges 96159000 NA Rs.0.00 Rs.0 Rs.0.00 Rs.0.00",
+      "Rs.0.00",
+      "Total Rs.6.93 Rs.145.53"
+    ]
+  }
+]

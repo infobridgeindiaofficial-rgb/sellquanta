@@ -1,0 +1,110 @@
+{
+  "id": "close_49619f4f-5df0-4fe6-a4a4-fab6dcfb9cd9",
+  "closedAt": "2026-09-24T07:20:20.219Z",
+  "label": "Sample closed month",
+  "sales": [
+    {
+      "id": "sale_3516ca43-3ddd-419b-8963-3aef222b25df",
+      "batchId": "batch_20260924_5b4fb376-652e-4305-b372-8fae3a33317b",
+      "date": "2026-09-24",
+      "agentId": "agent_4fe048c2-d2af-431d-8775-d385228e9fc1",
+      "agentName": "Asha Demo",
+      "companyId": "co_e5fb2d65-6487-4577-bfb9-d360a6d86994",
+      "companyName": "Demo Traders",
+      "accountId": "acct_5eed52e9-3f98-480d-b4c0-d13ef3f0c75c",
+      "marketplace": "Amazon",
+      "marketplaceSku": "JAR21402",
+      "productId": "prod_91a9a7a4-bc1c-4e4e-bb4d-43d8db0ce180",
+      "sku": "PRD-40",
+      "warehouseProductCode": "PRD-40",
+      "productName": "Glass jar",
+      "qty": 2,
+      "saleAmount": 598,
+      "profit": null,
+      "unitCost": 150,
+      "costTotal": 300,
+      "orderId": "401-0000001-0000101",
+      "trackingId": "",
+      "source": "manual",
+      "createdAt": "2026-09-24T07:20:20.206Z"
+    },
+    {
+      "id": "sale_2656b2f4-cd4e-4878-beb4-8ee820c97d00",
+      "batchId": "batch_20260924_5b4fb376-652e-4305-b372-8fae3a33317b",
+      "date": "2026-09-24",
+      "agentId": "agent_6dac835f-87d2-48ee-b022-83ac587a1024",
+      "agentName": "Ravi Sample",
+      "companyId": "co_73074d08-d083-43f4-a41e-ba95c189fd24",
+      "companyName": "Sample Mart",
+      "accountId": "acct_4ffb7b68-39a0-4726-beea-457375981d7c",
+      "marketplace": "Flipkart",
+      "marketplaceSku": "BTL14004",
+      "productId": "prod_ac9c05d3-c14e-48f8-8aa5-61607401a06a",
+      "sku": "PRD-25",
+      "warehouseProductCode": "PRD-25",
+      "productName": "Water bottle",
+      "qty": 1,
+      "saleAmount": 120,
+      "profit": null,
+      "unitCost": 80,
+      "costTotal": 80,
+      "orderId": "OD900000000000000101",
+      "trackingId": "",
+      "source": "manual",
+      "createdAt": "2026-09-24T07:20:20.206Z"
+    }
+  ],
+  "ledger": [
+    {
+      "id": "led_783a5e8f-eb24-41d6-b0dd-a757d2c6b7ac",
+      "date": "2026-09-24",
+      "agentId": "agent_4fe048c2-d2af-431d-8775-d385228e9fc1",
+      "type": "SALE",
+      "amount": 300,
+      "costBasis": true,
+      "referenceId": "sale_3516ca43-3ddd-419b-8963-3aef222b25df",
+      "note": "Amazon sale 401-0000001-0000101",
+      "createdAt": "2026-09-24T07:20:20.206Z"
+    },
+    {
+      "id": "led_150a10c8-8688-4cff-a38b-5d33c1c1548f",
+      "date": "2026-09-24",
+      "agentId": "agent_6dac835f-87d2-48ee-b022-83ac587a1024",
+      "type": "SALE",
+      "amount": 80,
+      "costBasis": true,
+      "referenceId": "sale_2656b2f4-cd4e-4878-beb4-8ee820c97d00",
+      "note": "Flipkart sale OD900000000000000101",
+      "createdAt": "2026-09-24T07:20:20.206Z"
+    },
+    {
+      "id": "led_af7cd93c-1259-4f2c-830b-20c4d8d8020a",
+      "date": "2026-09-24",
+      "agentId": "agent_4fe048c2-d2af-431d-8775-d385228e9fc1",
+      "type": "PAYMENT",
+      "amount": 100,
+      "note": "Agent payment",
+      "createdAt": "2026-09-24T07:20:20.209Z"
+    }
+  ],
+  "agentSummary": [
+    {
+      "agentId": "agent_4fe048c2-d2af-431d-8775-d385228e9fc1",
+      "agentName": "Asha Demo",
+      "companyId": "co_e5fb2d65-6487-4577-bfb9-d360a6d86994",
+      "companyName": "Demo Traders",
+      "due": 300,
+      "paid": 100,
+      "balance": 200
+    },
+    {
+      "agentId": "agent_6dac835f-87d2-48ee-b022-83ac587a1024",
+      "agentName": "Ravi Sample",
+      "companyId": "co_73074d08-d083-43f4-a41e-ba95c189fd24",
+      "companyName": "Sample Mart",
+      "due": 80,
+      "paid": 0,
+      "balance": 80
+    }
+  ]
+}

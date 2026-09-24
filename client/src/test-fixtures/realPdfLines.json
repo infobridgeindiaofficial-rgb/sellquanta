@@ -1,0 +1,66 @@
+[
+  {
+    "file": "amazon/001_invoice (1).pdf",
+    "expected": {
+      "marketplace": "Amazon",
+      "orderId": "408-0000000-0000001",
+      "sku": "STM140001",
+      "qty": 1,
+      "saleAmount": 249
+    },
+    "lines": [
+      "Order Number: 408-0000000-0000001 Invoice Number : IN-3",
+      "Sl. Unit Net Tax Tax Tax Total",
+      "Description Qty",
+      "No Price Amount Rate Type Amount Amount",
+      "1 Woven Bamboo Steamer Plate for Idiyappam and Vegetables |",
+      "B0TESTAA01 ( STM140001 ) ₹211.02 1 ₹211.02 18% IGST ₹37.98 ₹249.00",
+      "HSN:46021100",
+      "TOTAL: ₹37.98 ₹249.00",
+      "*ASSPL-Amazon Seller Services Pvt. Ltd., ARIPL-Amazon Retail India Pvt. Ltd. (only where Amazon Retail India Pvt. Ltd. fulfillment center is co-located)"
+    ]
+  },
+  {
+    "file": "flipkart/order__sample.pdf",
+    "expected": {
+      "marketplace": "Flipkart",
+      "orderId": "OD300000000000000001",
+      "sku": "SEV14002",
+      "qty": 1,
+      "saleAmount": 294
+    },
+    "lines": [
+      "STD E-Kart Logistics E",
+      "OD300000000000000001 PREPAID",
+      "SKU ID | Description QTY",
+      "1 SEV14002 | demobrand Set of 6 Pattern Discs Kitchen 1",
+      "FMPP0000000001",
+      "B1",
+      "Not for resale. Printed at 2121 hrs, 17/09/26",
+      "TOTAL PRICE: 294.00",
+      "TOTAL QTY: 1"
+    ]
+  },
+  {
+    "file": "meesho/Sub_Order_Labels_00000008-0000-4000-8000-000000000008 - Copy.pdf",
+    "expected": {
+      "marketplace": "Meesho",
+      "orderId": "330000000000000009_1",
+      "sku": "tst02-SkuB00000001",
+      "qty": 1,
+      "saleAmount": 201
+    },
+    "lines": [
+      "Product Details",
+      "SKU Size Qty Color Order No.",
+      "tst02-SkuB00000001 Free Size 1 Brown 330000000000000009_1",
+      "BILL OF SUPPLY/COMMERCIAL INVOICE Original For Recipient",
+      "Description Qty Gross Amount Discount Total",
+      "Premium 400 ML Stainless Steel Storage Container",
+      "with Airtight Lid – Kitchen Organizer Copper - Free 1 Rs.210.00 Rs.9.00 Rs.201.00",
+      "Size",
+      "Other Charges NA Rs.0.00 Rs.0 Rs.0.00",
+      "Total Rs.201.00"
+    ]
+  }
+]
