@@ -1,11 +1,11 @@
 // Real React DOM/component tests; only PDF I/O and backend APIs are substituted.
-// Test dependency: npm install --prefix tmp/selection-component-tests --no-save --package-lock=false jsdom
+// Uses the repository declared JSDOM development dependency.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { JSDOM } from '../tmp/selection-component-tests/node_modules/jsdom/lib/api.js';
+import { JSDOM } from 'jsdom';
 import { transform } from '../client/node_modules/esbuild/lib/main.js';
 console.info=()=>{};
 console.debug=()=>{};
