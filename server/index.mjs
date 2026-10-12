@@ -1,3 +1,4 @@
+import { createBankingRouter } from './bankingRoutes.mjs';
 import { writeBrandedWorkbook, importHeaderRow } from './excelStyle.mjs';
 import { createPurchaseRouter } from './purchaseRoutes.mjs';
 import express from "express";
@@ -78,6 +79,7 @@ app.get("/api/backup-info", (_req, res) => {
 });
 
 app.use("/api/purchases", createPurchaseRouter());
+app.use("/api/banking", createBankingRouter());
 
 app.get("/api/state", (_req, res) => res.json(publicState(readDb())));
 
