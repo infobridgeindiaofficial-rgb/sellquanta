@@ -1,3 +1,4 @@
+import Purchases from './Purchases';
 import ReportsDashboard from "./ReportsDashboard";
 import { agentWalletPeriod } from "./walletPeriod";
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -73,11 +74,12 @@ function Stat({ label, value, sub, className = "" }) {
   return <Card className={`stat ${className}`.trim()}><div className="stat-label">{label}</div><div className="stat-value">{value}</div>{sub && <div className="muted">{sub}</div>}</Card>;
 }
 
-const NAV_ICON = { dashboard:"dashboard", sales:"scan", warehouse:"box", master:"link", agents:"wallet", refunds:"refund", reports:"sheet" };
+const NAV_ICON = { dashboard:"dashboard", sales:"scan", purchases:"box", warehouse:"box", master:"link", agents:"wallet", refunds:"refund", reports:"sheet" };
 const PAGE_SUBTITLE = {
   dashboard: "Business performance across companies, marketplaces and inventory.",
   sales: "Scan shipping labels, resolve mappings and record today's sales.",
-  warehouse: "Manage warehouse products, stock levels and cost.",
+  purchases: "Receive purchases, manage suppliers and review purchase history.",
+  warehouse: "View warehouse products, stock levels and cost.",
   master: "Map marketplace SKUs to warehouse products.",
   agents: "Track agent stock cost, payments and outstanding balances.",
   refunds: "Process eligible refunds and review refund history.",
@@ -140,6 +142,7 @@ export default function App() {
           {[
             ["dashboard","Dashboard"],
             ["sales","Daily Sales"],
+            ["purchases","Purchases"],
             ["warehouse","Warehouse"],
             ["master","Product Master"],
             ["agents","Agents & Wallet"],
@@ -162,6 +165,7 @@ export default function App() {
             <h1>{{
               dashboard:"Dashboard",
               sales:"Daily Sales",
+              purchases:"Purchases",
               warehouse:"Warehouse",
               master:"Product Master",
               agents:"Agents & Wallet",
@@ -182,7 +186,8 @@ export default function App() {
 
         {tab === "dashboard" && <Dashboard state={state} />}
         {tab === "sales" && <Sales state={state} reload={reload} notify={notify} setHealth={setHealth} />}
-        {tab === "warehouse" && <Warehouse state={state} reload={reload} notify={notify} />}
+        {tab === "purchases" && <Purchases state={state} reload={reload} notify={notify} />}
+        {tab === "warehouse" && <Warehouse state={state} />}
         {tab === "master" && <ProductMaster state={state} reload={reload} notify={notify} />}
         {tab === "agents" && <Agents state={state} reload={reload} notify={notify} />}
         {tab === "refunds" && <Refunds state={state} reload={reload} notify={notify} />}
@@ -611,262 +616,32 @@ function Sales({ state, reload, notify, setHealth }) {
   </>;
 }
 
-function Warehouse({ state, reload, notify }) {
-  const [exportingBackup, setExportingBackup] = useState(false);
-  const exportBackup = async () => {
-    if (exportingBackup) return false;
-    setExportingBackup(true);
-    try {
-      const { blob, name } = await api.exportWarehouseBackup();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a"); a.href = url; a.download = name; a.click();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
-    } catch (e) { notify(e.message); throw e; }
-    finally { setExportingBackup(false); }
-  };
-  const [sku,setSku]=useState("");
-  const [name,setName]=useState("");
-  const [cost,setCost]=useState(0);
-  const [stock,setStock]=useState(0);
-  const [low,setLow]=useState(5);
-  const [adjustId,setAdjustId]=useState("");
-  const [adjustQty,setAdjustQty]=useState("");
-  const [adjustCost,setAdjustCost]=useState("");
-  const [file,setFile]=useState(null);
-  const [preview,setPreview]=useState(null);
-  const [result,setResult]=useState(null);
-  const [image,setImage]=useState("");
-  const newImageInput = useRef(null);
-  const changeImageInput = useRef(null);
-  const changeImageId = useRef("");
-  const products = state.products.filter(p => p.active !== false); // removed (archived) products are hidden here and in every selector
-  const summary = warehouseSummary(products); // always calculated from the products above, so it follows every stock / cost / product change
-  const [editId,setEditId]=useState("");
-  const [editName,setEditName]=useState("");
-  const [editCost,setEditCost]=useState("");
-  const [editStock,setEditStock]=useState("");
-  const [editImage,setEditImage]=useState("");
-  const [editImageChanged,setEditImageChanged]=useState(false);
-  const editImageInput = useRef(null);
-
-  // Shrink to a small JPEG data URL (max 200px) so it can live inside the local JSON file.
-  const fileToThumb = f => new Promise((resolve, reject) => {
-    const url = URL.createObjectURL(f);
-    const img = new Image();
-    img.onload = () => {
-      const scale = Math.min(1, 200 / Math.max(img.width, img.height));
-      const c = document.createElement("canvas");
-      c.width = Math.max(1, Math.round(img.width * scale));
-      c.height = Math.max(1, Math.round(img.height * scale));
-      const ctx = c.getContext("2d");
-      ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, c.width, c.height);
-      ctx.drawImage(img, 0, 0, c.width, c.height);
-      URL.revokeObjectURL(url);
-      resolve(c.toDataURL("image/jpeg", 0.8));
-    };
-    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("Could not read that image.")); };
-    img.src = url;
-  });
-
-  const pickNewImage = async e => {
-    const f = e.target.files[0];
-    e.target.value = "";
-    if (!f) return;
-    try { setImage(await fileToThumb(f)); } catch(err){notify(err.message);}
-  };
-
-  const pickChangeImage = async e => {
-    const f = e.target.files[0];
-    e.target.value = "";
-    if (!f) return;
-    try {
-      await api.setProductImage(changeImageId.current, await fileToThumb(f));
-      await reload(); notify("Product image saved.");
-    } catch(err){notify(err.message);}
-  };
-
-  const startEdit = p => {
-    setEditId(p.id); setEditName(p.name); setEditCost(String(p.costPrice ?? 0)); setEditStock(String(p.stock ?? 0));
-    setEditImage(p.image || ""); setEditImageChanged(false);
-  };
-
-  const pickEditImage = async e => {
-    const f = e.target.files[0];
-    e.target.value = "";
-    if (!f) return;
-    try { setEditImage(await fileToThumb(f)); setEditImageChanged(true); } catch(err){notify(err.message);}
-  };
-
-  const saveEdit = async () => {
-    try {
-      const body = { name:editName, costPrice:editCost, stock:editStock };
-      if (editImageChanged) body.image = editImage;
-      await api.updateProduct(editId, body);
-      setEditId(""); await reload(); notify("Product updated.");
-    } catch(e){notify(e.message);}
-  };
-
-  const removeProduct = async p => {
-    if (!window.confirm("Are you sure you want to remove this product?")) return;
-    try {
-      const r = await api.removeProduct(p.id);
-      if (editId === p.id) setEditId("");
-      await reload();
-      notify(r.deleted ? "Product removed." : "Product removed from the warehouse. Its history is kept.");
-    } catch(e){notify(e.message);}
-  };
-
-  const add = async () => {
-    try {
-      await api.addProduct({sku,name,costPrice:Number(cost),stock:Number(stock),lowStockLevel:Number(low),image});
-      setSku(""); setName(""); setCost(0); setStock(0); setLow(5); setImage(""); await reload(); notify("Product added.");
-    } catch(e){notify(e.message);}
-  };
-
-  const fileToBase64 = f => new Promise((resolve, reject) => {
-    const r = new FileReader();
-    r.onload = () => resolve(String(r.result).split(",")[1]);
-    r.onerror = () => reject(new Error("Could not read the file."));
-    r.readAsDataURL(f);
-  });
-
-  const fileInput = useRef(null);
-
-  const downloadTemplate = async () => {
-    try {
-      const url = URL.createObjectURL(await api.productImportTemplate());
-      const a = document.createElement("a"); a.href=url; a.download="SellQuanta_Warehouse_Import_Template.xlsx"; a.click();
-      setTimeout(()=>URL.revokeObjectURL(url),1000);
-    } catch(e){notify(e.message); throw e;}
-  };
-
-  const pickFile = async e => {
-    const f = e.target.files[0];
-    e.target.value = "";
-    if (!f) return;
-    setFile(f); setPreview(null); setResult(null);
-    try {
-      const { rows } = await api.previewProductImport(await fileToBase64(f));
-      setPreview(rows);
-    } catch(err){notify(err.message);}
-  };
-
-  const importValid = async () => {
-    try {
-      setResult(await api.importProducts(await fileToBase64(file)));
-      setPreview(null); setFile(null); await reload(); notify("Import finished.");
-    } catch(e){notify(e.message);}
-  };
-
-  const adjust = async () => {
-    try {
-      await api.adjustStock({productId:adjustId, costPrice:adjustCost, qty:adjustQty, note:"Manual warehouse adjustment"});
-      setAdjustQty(""); await reload(); notify("Product updated.");
-    } catch(e){notify(e.message);}
-  };
+function Warehouse({ state }) {
+  const [search, setSearch] = useState("");
+  const products = state.products.filter(p => p.active !== false);
+  const summary = warehouseSummary(products);
+  const query = search.trim().toLowerCase();
+  const shownProducts = products.filter(p => !query || [p.sku, p.name].some(value => String(value ?? "").toLowerCase().includes(query)));
 
   return <>
-    <Card className="flush">
-      <div className="tool-grid">
-        <section>
-          <h3>Manual Product Entry</h3>
-          <div className="form-grid wh-entry">
-            <label>Warehouse Product Code<input className="code" value={sku} onChange={e=>setSku(e.target.value)}/></label>
-            <label>Product Name<input value={name} onChange={e=>setName(e.target.value)}/></label>
-            <label>Cost Price<input type="number" min="0" value={cost} onChange={e=>setCost(e.target.value)}/></label>
-            <label>Opening Stock<input type="number" min="0" value={stock} onChange={e=>setStock(e.target.value)}/></label>
-            <label>Low Stock Alert<input type="number" value={low} onChange={e=>setLow(e.target.value)}/></label>
-            <button className="align-end" onClick={add}><Icon name="plus" size={15}/>Add Product</button>
-          </div>
-          <div className="img-row">
-            {image && <span className="thumb"><img src={image} alt=""/></span>}
-            <button className="ghost sm" onClick={()=>newImageInput.current.click()}><Icon name="image" size={14}/>{image ? "Change Image" : "Product Image (optional)"}</button>
-            <input ref={newImageInput} type="file" accept=".jpg,.jpeg,.png,.webp" hidden onChange={pickNewImage}/>
-            {image && <button className="quiet sm" onClick={()=>setImage("")}>Remove</button>}
-          </div>
-        </section>
-
-        <section>
-          <h3>Bulk Import Products</h3>
-          <div className="inline">
-            <DownloadButton action={exportBackup} label="Export Warehouse Backup"/>
-            <DownloadButton action={downloadTemplate} label="Download Excel Template"/>
-            <button className="ghost" onClick={()=>fileInput.current.click()}><Icon name="upload" size={15}/>Upload Excel</button>
-            <input ref={fileInput} type="file" accept=".xlsx" hidden onChange={pickFile}/>
-            {file && <span className="muted">{file.name}</span>}
-          </div>
-          {preview && <div className="inline" style={{marginTop:12}}><button className="primary" onClick={importValid} disabled={!preview.some(r=>r.status!=="Error")}><Icon name="check" size={15}/>Import Valid Products</button></div>}
-          {result && <div>
-            <p className="result-line"><span>New products added: <b>{result.added}</b></span><span>Existing products updated: <b>{result.updated}</b></span><span>Error/skipped rows: <b>{result.errors.length}</b></span></p>
-            {result.errors.length > 0 && <ul className="err-list">{result.errors.map(r=><li key={r.row}>Row {r.row}: {r.error}</li>)}</ul>}
-          </div>}
-        </section>
-      </div>
-      {preview && <div className="table-wrap scroll" style={{borderTop:"1px solid var(--line)"}}><table><thead><tr><th>Warehouse Product Code</th><th>Product Name</th><th className="n">Cost Price</th><th className="n">Opening Stock</th><th>Status</th></tr></thead>
-      <tbody>{preview.length ? preview.map(r=><tr key={r.row} className={r.status==="Error" ? "is-err" : ""}>
-        <td><span className="code">{r.code}</span></td><td>{r.name}</td><td className="n">{r.costPrice}</td><td className="n">{r.openingStock}</td>
-        <td className="wrap"><span className={`badge ${r.status==="Error" ? "err" : r.status==="New" ? "" : "info"}`}>{r.status}</span>{r.error && <span className="reason">{r.error}</span>}</td>
-      </tr>):<EmptyRow colSpan="5">No rows found in the WAREHOUSE sheet.</EmptyRow>}</tbody></table></div>}
-    </Card>
-
-    <Card className="flush">
-      <div className="ph"><h3>Stock In / Adjustment</h3><span className="meta">Positive quantity adds stock, negative removes it</span></div>
-      <div className="pb">
-        <div className="form-grid stock-adj">
-          <label>Product<select value={adjustId} onChange={e=>{setAdjustId(e.target.value); setAdjustCost(String(products.find(p=>p.id===e.target.value)?.costPrice ?? ""));}}>
-            <option value="">Select product</option>{products.map(p=><option key={p.id} value={p.id}>{p.sku} — {p.name} ({p.stock})</option>)}
-          </select></label>
-          <label>Cost Price<input type="number" min="0" value={adjustCost} onChange={e=>setAdjustCost(e.target.value)}/></label>
-          <label>Quantity Change<input type="number" placeholder="+20 or -2" value={adjustQty} onChange={e=>setAdjustQty(e.target.value)}/></label>
-          <button className="align-end" onClick={adjust}>Update Product</button>
-        </div>
-      </div>
-    </Card>
-
     <div className="stats cols-3">
       <Stat label="Total Products" value={summary.products.toLocaleString("en-IN")} />
       <Stat label="Total Stock Units" value={summary.units.toLocaleString("en-IN")} />
       <Stat label="Current Stock Value" value={<Money n={summary.value}/>} sub="Current Stock × Cost Price" className="primary" />
     </div>
-
     <Card className="flush">
-      <div className="ph"><h3>Warehouse Stock</h3><span className="meta">{products.length} product{products.length === 1 ? "" : "s"}</span></div>
-      <div className="table-wrap"><table><thead><tr><th style={{width:64}}>Image</th><th>Warehouse Product Code</th><th>Product Name</th><th className="n">Cost Price</th><th className="n">Current Stock</th><th className="n">Actions</th></tr></thead>
-      <tbody>{products.length ? products.map(p=>{
-        const editing = editId === p.id;
-        const shownImage = editing ? editImage : p.image;
+      <div className="ph"><h3>Warehouse Stock</h3><span className="meta">{shownProducts.length} of {products.length} product{products.length === 1 ? "" : "s"}</span></div>
+      <div className="pb"><label>Product Search<input type="search" aria-label="Search warehouse products" placeholder="Search product name or code" value={search} onChange={e => setSearch(e.target.value)}/></label></div>
+      <div className="table-wrap"><table><thead><tr><th style={{width:64}}>Image</th><th>Warehouse Product Code</th><th>Product Name</th><th className="n">Cost Price</th><th className="n">Current Stock</th><th>Stock Status</th></tr></thead>
+      <tbody>{shownProducts.length ? shownProducts.map(p => {
         const stockClass = Number(p.stock) <= 0 ? "zero" : Number(p.stock) <= (p.lowStockLevel ?? 5) ? "lowq" : "";
-        return <tr key={p.id} className={editing ? "is-editing" : ""}>
-        <td style={{paddingTop:6,paddingBottom:6}}>
-          <div className="thumb">
-            {shownImage
-              ? <img src={shownImage} alt=""/>
-              : <div className="ph-img"><Icon name="image" size={16} strokeWidth={1.7}/></div>}
-            <button className="img-edit" title="Edit image" aria-label="Edit image" onClick={()=>{ if (editing) editImageInput.current.click(); else { changeImageId.current=p.id; changeImageInput.current.click(); } }}><Icon name="pencil" size={11} strokeWidth={2.2}/></button>
-          </div>
-          {editing && editImage && <button className="quiet sm" style={{marginTop:6,height:24,padding:"0 6px",fontSize:11}} onClick={()=>{setEditImage(""); setEditImageChanged(true);}}>Remove image</button>}
-        </td>
-        {editing
-          ? <>
-              <td title="The Warehouse Product Code is permanent and cannot be edited"><span className="code">{p.sku}</span></td>
-              <td className="wrap"><input value={editName} onChange={e=>setEditName(e.target.value)}/></td>
-              <td className="n"><input type="number" min="0" className="small" value={editCost} onChange={e=>setEditCost(e.target.value)}/></td>
-              <td className="n"><input type="number" min="0" step="1" className="small" value={editStock} onChange={e=>setEditStock(e.target.value)}/></td>
-              <td className="actions"><span className="row-acts">
-                <button className="primary sm" onClick={saveEdit}>Save</button>
-                <button className="ghost sm" onClick={()=>setEditId("")}>Cancel</button>
-              </span></td>
-            </>
-          : <>
-              <td><span className="code">{p.sku}</span></td><td className="strong wrap">{p.name}</td><td className="n"><Money n={p.costPrice}/></td><td className="n"><span className={`stock-q ${stockClass}`}>{p.stock}</span></td>
-              <td className="actions"><span className="row-acts">
-                <button className="icon-btn" title="Edit" aria-label={`Edit ${p.name}`} onClick={()=>startEdit(p)}><Icon name="pencil" size={15}/></button>
-                <button className="icon-btn danger" title="Remove" aria-label={`Remove ${p.name}`} onClick={()=>removeProduct(p)}><Icon name="trash" size={15}/></button>
-              </span></td>
-            </>}
-      </tr>;}):<EmptyRow colSpan="6">No products yet.</EmptyRow>}</tbody></table></div>
-      <input ref={changeImageInput} type="file" accept=".jpg,.jpeg,.png,.webp" hidden onChange={pickChangeImage}/>
-      <input ref={editImageInput} type="file" accept=".jpg,.jpeg,.png,.webp" hidden onChange={pickEditImage}/>
+        return <tr key={p.id}>
+          <td style={{paddingTop:6,paddingBottom:6}}><div className="thumb">{p.image ? <img src={p.image} alt={p.name || "Product"}/> : <div className="ph-img"><Icon name="image" size={16} strokeWidth={1.7}/></div>}</div></td>
+          <td><span className="code">{p.sku}</span></td><td className="strong wrap">{p.name}</td><td className="n"><Money n={p.costPrice}/></td>
+          <td className="n"><span className={`stock-q ${stockClass}`}>{p.stock}</span></td>
+          <td><span className={`stock-q ${stockClass}`}>{stockClass === "zero" ? "Out of stock" : stockClass === "lowq" ? "Low stock" : "In stock"}</span></td>
+        </tr>;
+      }) : <EmptyRow colSpan="6">{products.length ? "No products match your search." : "No products yet."}</EmptyRow>}</tbody></table></div>
     </Card>
   </>;
 }

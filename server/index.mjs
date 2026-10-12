@@ -1,3 +1,4 @@
+import { createPurchaseRouter } from './purchaseRoutes.mjs';
 import express from "express";
 import cors from "cors";
 import fs from "node:fs";
@@ -73,6 +74,8 @@ app.get("/api/backup-info", (_req, res) => {
   try { res.json(backupInfo()); }
   catch (e) { res.status(500).json({ error: e.message }); }
 });
+
+app.use("/api/purchases", createPurchaseRouter());
 
 app.get("/api/state", (_req, res) => res.json(publicState(readDb())));
 

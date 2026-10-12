@@ -78,15 +78,12 @@ test('failed download shows "Download failed" (plus the existing message), then 
   assert.equal(b.textContent,'Download Excel Template');
 });
 
-test('all Warehouse and Product Master download buttons use the feedback pattern',async t=>{
-  globalThis.__exportApi.exportWarehouseBackup=async()=>({blob:new Blob(),name:'W.xlsx'});
-  globalThis.__exportApi.productImportTemplate=async()=>new Blob();
-  const view=await mount(t,Warehouse);
-  for(const label of ['Export Warehouse Backup','Download Excel Template']) {
-    await act(async()=>{byLabel(label).click();});await act(async()=>{await sleep(0);});
-    assert.equal(byLabel(label).textContent,'Downloaded',label);
-  }
-  assert.deepEqual(view.downloads,['W.xlsx','SellQuanta_Warehouse_Import_Template.xlsx']);
+test('Product Master company backup retains download feedback',async t=>{
+  globalThis.__exportApi.exportCompanyBackup=async()=>({blob:new Blob(),name:'Company.xlsx'});
+  const view=await mount(t,ProductMaster);await pickCompany();
+  await act(async()=>{byLabel('Export Company Backup').click();});await act(async()=>{await sleep(0);});
+  assert.equal(byLabel('Export Company Backup').textContent,'Downloaded');
+  assert.deepEqual(view.downloads,['Company.xlsx']);
 });
 
 test('Reports export downloads without closing records; Backup and Danger Zone stay below reports',async t=>{

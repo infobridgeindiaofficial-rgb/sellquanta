@@ -141,9 +141,10 @@ test('real App/API on copied business: reset, fresh company in Product Master, n
   assert([...document.querySelector('select').options].some(o=>o.value===company.id&&o.textContent==='TEST NEW COMPANY'));
   assert.equal(document.querySelector('select').value,'');
   await click(button('Warehouse'));
-  await change(field('Warehouse Product Code'),'NEW-UI-CODE');await change(field('Product Name'),'NEW UI PRODUCT');
-  await change(field('Cost Price'),'10');await change(field('Opening Stock'),'5');await click(button('Add Product'));
-  await waitFor(()=>document.querySelector('table')?.textContent.includes('NEW UI PRODUCT'));
+  assert.equal(button('Add Product'),undefined);
+  assert(document.querySelector('[aria-label="Search warehouse products"]'));
+  // Seed only the isolated test server through the retained API; Warehouse is read-only.
+  await api.addProduct({sku:'NEW-UI-CODE',name:'NEW UI PRODUCT',costPrice:10,stock:5,lowStockLevel:5});
   await click(button('Agents & Wallet'));
   await change(document.querySelector('.agent-add input'),'NEW UI AGENT');await change(document.querySelector('.agent-add select'),company.id);
   await click(button('Add Agent'));await waitFor(()=>document.body.textContent.includes('NEW UI AGENT'));
