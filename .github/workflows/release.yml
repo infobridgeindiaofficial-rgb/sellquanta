@@ -73,8 +73,14 @@ jobs:
 
           Built by GitHub Actions from the public source at commit ${{ github.sha }}.
 
+          Includes Banking, Purchase Management, Reports, Agent Wallet filters and branded Excel exports.
+
+          Existing v1.0.2 users: back up within SellQuanta, close the app, and run this installer over the existing installation. Do not uninstall or delete %APPDATA%\SellQuanta Data. v1.0.2 requires a manual update.
+
+          Actual Windows installer upgrade/uninstall lifecycle has not been tested on a separate machine. Synthetic data compatibility checks passed.
+
           SHA-256 ($name): $hash
 
           The installer is currently unsigned. Windows SmartScreen may display an Unknown Publisher warning.
           "@
-          gh release create "${{ github.ref_name }}" "upload/$name" "upload/$name.sha256" --title "SellQuanta $env:VERSION" --notes $notes --verify-tag
+          gh release create "${{ github.ref_name }}" "upload/$name" "upload/$name.sha256" --title "SellQuanta $env:VERSION" --notes $notes --verify-tag --draft

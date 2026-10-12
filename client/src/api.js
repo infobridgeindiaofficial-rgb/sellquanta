@@ -1,4 +1,5 @@
-const API = "http://127.0.0.1:8787/api";
+// Isolated development previews may use a separate engine; production keeps the existing loopback address.
+const API = import.meta.env?.DEV && import.meta.env.VITE_DEV_API_ORIGIN ? `${import.meta.env.VITE_DEV_API_ORIGIN}/api` : "http://127.0.0.1:8787/api";
 
 async function json(path, options = {}) {
   const r = await fetch(`${API}${path}`, {
@@ -21,6 +22,8 @@ async function backupDownload(path) {
 }
 
 export const api = {
+  localAiStatus: () => json('/ollama/status'),
+  startLocalAi: () => json('/ollama/start',{method:'POST',body:JSON.stringify({confirm:true})}),
   bankingReport: filter => json('/banking?'+new URLSearchParams(filter)),
   bankAudit: () => json('/banking/audit'),
   saveBankSettlement: (body,id) => json('/banking/settlements'+(id?'/'+encodeURIComponent(id):''),{method:id?'PUT':'POST',body:JSON.stringify(body)}),

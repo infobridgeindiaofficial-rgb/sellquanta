@@ -6,11 +6,15 @@
 // version. Installed: %APPDATA%\SellQuanta Data (Program Files is read-only). Override: SELLQUANTA_DATA_ROOT.
 "use strict";
 
-const { app, BrowserWindow, Menu, shell, session, dialog, Notification } = require("electron");
+const { app, BrowserWindow, Menu, shell, session, dialog, Notification, ipcMain } = require("electron");
 const path = require("node:path");
 const fs = require("node:fs");
 const { spawn, execFile } = require("node:child_process");
 const dataLocation = require("./dataLocation.cjs");
+const { createUpdateManager, fetchSignedManifest, MANUAL_URL } = require('./updateManager.cjs');
+const { backupBeforeUpdate } = require('./updateBackup.cjs');
+let updateManager = null;
+let offeredVersion = null;
 
 const ROOT = path.resolve(__dirname, "..");          // the app files (project folder in development, resources\app when installed)
 const BACKEND_PORT = 8787;                                   // client/src/api.js calls http://127.0.0.1:8787/api
@@ -208,44 +212,9 @@ function buildClient() {
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-// Ollama: use a running one; otherwise start an installed one silently; if not installed, SellQuanta still opens.
-// Models and settings are the user's own Ollama install (inherited environment, e.g. OLLAMA_MODELS); nothing is pulled.
-
-async function ollamaUp() {
-  return (await get(`${OLLAMA_ORIGIN}/api/tags`, 1500)).ok;
-}
-
-function findOllama() {
-  const candidates = [];
-  for (const dir of (process.env.PATH || "").split(path.delimiter)) if (dir) candidates.push(path.join(dir.replace(/"/g, ""), "ollama.exe"));
-  if (process.env.LOCALAPPDATA) candidates.push(path.join(process.env.LOCALAPPDATA, "Programs", "Ollama", "ollama.exe"));
-  for (const pf of [process.env.ProgramFiles, process.env["ProgramFiles(x86)"]]) if (pf) candidates.push(path.join(pf, "Ollama", "ollama.exe"));
-  return candidates.find(f => { try { return fs.statSync(f).isFile(); } catch { return false; } }) || null;
-}
-
-async function ensureOllama() {
-  if (await ollamaUp()) { log("ollama: already running - using it"); return "running"; }
-  const exe = findOllama();
-  if (!exe) { log("ollama: not installed - AI label scanning will show a setup message"); return "not-installed"; }
-  log("ollama: starting", exe);
-  try {
-    ollamaChild = spawn(exe, ["serve"], { env: process.env, windowsHide: true, stdio: "ignore" });
-    ollamaChild.on("error", e => { log("ollama start error:", e.message); ollamaChild = null; });
-    ollamaChild.on("exit", code => { log("ollama exited, code", code); ollamaChild = null; });
-  } catch (e) {
-    log("ollama start error:", e.message);
-    ollamaChild = null;
-    return "failed";
-  }
-  return "starting";
-}
-
-async function stopOwnedOllama() {
-  if (!ollamaChild) return;
-  log("stopping the Ollama that SellQuanta started, pid", ollamaChild.pid);
-  await killTree(ollamaChild.pid);
-  ollamaChild = null;
-}
+// Ollama is optional. The backend only checks connectivity; services start only
+// after explicit user confirmation from Settings. No models are auto-downloaded.
+async function stopOwnedOllama() {} // retained shutdown interface; no automatic owner
 
 // ---------------------------------------------------------------------------------------------------------------------
 // Window + security
@@ -310,6 +279,7 @@ function createWindow() {
     backgroundColor: "#F7F7F4",
     autoHideMenuBar: true,
     webPreferences: {
+      preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
@@ -356,15 +326,6 @@ async function start() {
 
 async function startInner() {
   setStatus("Starting SellQuanta...");
-
-  // 1. Local AI (Ollama). Settled before the backend starts, so the backend never races to start a second copy of it.
-  setStatus("Checking local AI (Ollama)...");
-  const ollama = await ensureOllama();
-  if (ollama === "starting") {
-    setStatus("Starting local AI (Ollama)...");
-    const up = await waitFor(ollamaUp, 15);
-    log(up ? "ollama: ready" : "ollama: not ready after 15s - continuing; label scanning will say so if it stays down");
-  }
 
   // 2. Dev only: rebuild the screen if its source changed since the last build.
   if (clientBuildNeeded()) {
@@ -461,11 +422,56 @@ async function main() {
   Menu.setApplicationMenu(null);
   hardenSession();
   log(`SellQuanta ${app.getVersion()} starting. electron ${process.versions.electron}, node ${process.versions.node}, packaged ${app.isPackaged}, app ${ROOT}, data ${DATA_ROOT}`);
+  registerUpdateIPC();
   await createWindow();
-  start();
+  await start();
+  initialiseUpdates();
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
+
+function updateState() {
+  return updateManager?.getState() || { status: 'manual', currentVersion: app.getVersion(), manualUrl: MANUAL_URL, error: app.isPackaged ? 'Update support could not start. Use the manual download.' : 'Automatic installation is available only in the Windows desktop build.' };
+}
+async function confirmDownload() {
+  const s=updateState();
+  const answer=await dialog.showMessageBox(win,{type:'question',title:'SellQuanta update',message:'Download SellQuanta '+s.version+'?',detail:s.releaseNotes||'',buttons:['Download update','Later'],defaultId:1,cancelId:1,noLink:true});
+  if(answer.response!==0)return s;
+  return updateManager.download();
+}
+function registerUpdateIPC() {
+  const handle=(name,fn)=>ipcMain.handle(name,async event=>{
+    if(!win||event.sender!==win.webContents||event.senderFrame!==win.webContents.mainFrame||!isAppUrl(event.senderFrame.url))throw Error('Update request origin is not allowed.');
+    return fn();
+  });
+  handle('sellquanta:update-status',()=>updateState());
+  handle('sellquanta:update-check',()=>updateManager?updateManager.check():updateState());
+  handle('sellquanta:update-download',()=>{if(!updateManager)throw Error('Use the manual update link.');return confirmDownload();});
+  handle('sellquanta:update-install',async()=>{if(!updateManager)throw Error('Use the manual update link.');await updateManager.apply();return updateState();});
+}
+function initialiseUpdates() {
+  if(!app.isPackaged||process.platform!=='win32')return;
+  try {
+    const {autoUpdater}=require('electron-updater');
+    autoUpdater.logger={info:log,warn:log,error:log,debug:()=>{}};
+    updateManager=createUpdateManager({updater:autoUpdater,publicKey:require('./update-public-key.json').key,currentVersion:app.getVersion(),fetchManifest:fetchSignedManifest,
+      onChange:state=>{if(win&&!win.isDestroyed())win.webContents.send('sellquanta:update-state',state);},
+      onAvailable:state=>{if(offeredVersion===state.version)return;offeredVersion=state.version;void confirmDownload().catch(e=>log('Update download:',e.message));},
+      install:async proceed=>{
+        const answer=await dialog.showMessageBox(win,{type:'question',title:'Install SellQuanta update',message:'Install the verified update and close SellQuanta?',detail:'Finish saving your work first. The engine will stop, a verified business-data backup will be made, and the installer will replace application files only. Your data folder and settings are retained.',buttons:['Install and close','Later'],defaultId:1,cancelId:1,noLink:true});
+        if(answer.response!==0)return;
+        await stopOwnedBackend();
+        try { backupBeforeUpdate(DATA_ROOT,updateState().version); }
+        catch(e){await start();throw e;}
+        quitting=true;cleanedUp=true;updateManager.stop();win?.hide();
+        try { if(proceed()===false)throw Error('The update installer could not start. Use the manual download.'); }
+        catch(e){quitting=false;cleanedUp=false;win?.show();await start();throw e;}
+      }
+    });
+    updateManager.start();
+  } catch(e){log('Update support unavailable:',e.message);}
+}
+
 // Shutdown: stop only what SellQuanta started (its backend, and Ollama only if SellQuanta started it).
 
 app.on("window-all-closed", () => app.quit());
@@ -476,6 +482,7 @@ app.on("before-quit", e => {
   if (quitting) return;
   quitting = true;
   log("quitting");
+  updateManager?.stop();
   Promise.allSettled([stopOwnedBackend(), stopOwnedOllama()]).finally(() => {
     cleanedUp = true;
     log("clean exit");

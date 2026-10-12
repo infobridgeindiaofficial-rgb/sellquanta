@@ -1,3 +1,4 @@
+import Settings from './Settings';
 import Banking from './Banking';
 import Purchases from './Purchases';
 import ReportsDashboard from "./ReportsDashboard";
@@ -75,7 +76,7 @@ function Stat({ label, value, sub, className = "" }) {
   return <Card className={`stat ${className}`.trim()}><div className="stat-label">{label}</div><div className="stat-value">{value}</div>{sub && <div className="muted">{sub}</div>}</Card>;
 }
 
-const NAV_ICON = { dashboard:"dashboard", sales:"scan", purchases:"box", warehouse:"box", master:"link", agents:"wallet", refunds:"refund", banking:"wallet", reports:"sheet" };
+const NAV_ICON = { dashboard:"dashboard", sales:"scan", purchases:"box", warehouse:"box", master:"link", agents:"wallet", refunds:"refund", settings:"link", banking:"wallet", reports:"sheet" };
 const PAGE_SUBTITLE = {
   dashboard: "Business performance across companies, marketplaces and inventory.",
   sales: "Scan shipping labels, resolve mappings and record today's sales.",
@@ -84,6 +85,7 @@ const PAGE_SUBTITLE = {
   master: "Map marketplace SKUs to warehouse products.",
   agents: "Track agent stock cost, payments and outstanding balances.",
   refunds: "Process eligible refunds and review refund history.",
+  settings: "Application updates and optional local AI setup.",
   banking: "Bank receipts and marketplace reconciliation, separate from agent wallets.",
   reports: "Sales and returns reports across current and archived records."
 };
@@ -133,7 +135,7 @@ export default function App() {
   };
 
   return (
-    <div className={`app${tab === "purchases" ? " app-purchases" : tab === "banking" ? " app-banking" : ""}`}>
+    <div className={`app${tab === "purchases" ? " app-purchases" : tab === "banking" ? " app-banking" : tab === "settings" ? " app-settings" : ""}`}>
       <aside>
         <div className="brand">
           <div className="logo"><img src="/logo.png" alt="" width="26" height="26" /></div>
@@ -150,7 +152,8 @@ export default function App() {
             ["agents","Agents & Wallet"],
             ["refunds","Refunds"],
             ["banking","Banking"],
-            ["reports","Reports"]
+            ["reports","Reports"],
+            ["settings","Settings"]
           ].map(([id,label]) => (
             <button key={id} onClick={() => setTab(id)} className={tab === id ? "active" : ""} aria-current={tab === id ? "page" : undefined}><Icon name={NAV_ICON[id]} size={16} strokeWidth={1.75}/>{label}</button>
           ))}
@@ -174,7 +177,8 @@ export default function App() {
               agents:"Agents & Wallet",
               refunds:"Refunds",
               banking:"Banking",
-              reports:"Reports"
+              reports:"Reports",
+              settings:"Settings"
             }[tab]}</h1>
             <p>{PAGE_SUBTITLE[tab]}</p>
           </div>
@@ -195,6 +199,7 @@ export default function App() {
         {tab === "master" && <ProductMaster state={state} reload={reload} notify={notify} />}
         {tab === "agents" && <Agents state={state} reload={reload} notify={notify} />}
         {tab === "refunds" && <Refunds state={state} reload={reload} notify={notify} />}
+        {tab === "settings" && <Settings notify={notify} />}
         {tab === "banking" && <Banking notify={notify} Card={Card} Stat={Stat} Mkt={Mkt} DownloadButton={DownloadButton} />}
         {tab === "reports" && <ReportsPage state={state} notify={notify} onBusinessReset={businessResetCompleted} />}
       </main>
@@ -476,7 +481,7 @@ function Sales({ state, reload, notify, setHealth }) {
       } catch (err) { console.warn('[Scan diagnostic] failed:', err.message); }
       // Health is informational: it must not hold the scan queue busy after rows
       // are ready. In particular, an unavailable Ollama may leave this pending.
-      void batchPerf.async('post_scan_health_request',()=>api.health().catch(()=>({ollama:{ok:true}})),{endpoint:'/api/health',mayPingOrStartOllama:true})
+      void batchPerf.async('post_scan_health_request',()=>api.health().catch(()=>({ollama:{ok:true}})),{endpoint:'/api/health',mayPingOrStartOllama:false})
         .then(setHealth).catch(error=>batchPerf.log('post_scan_health_error',{error:error.message}));
       notify(`${rows.length} label row(s) read from ${scanFiles.length - errors.length} of ${scanFiles.length} file(s).`);
     } finally { setScanning(false); setProgress(null); batchPerf.log('runScan_end',{rows:rows.length,errors:errors.length}); }

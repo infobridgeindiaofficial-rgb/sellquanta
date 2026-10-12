@@ -1,3 +1,4 @@
+import { inspectLocalAi, startLocalAi, confirmLocalAiRequest } from './localAi.mjs';
 import { createBankingRouter } from './bankingRoutes.mjs';
 import { writeBrandedWorkbook, importHeaderRow } from './excelStyle.mjs';
 import { createPurchaseRouter } from './purchaseRoutes.mjs';
@@ -80,6 +81,11 @@ app.get("/api/backup-info", (_req, res) => {
 
 app.use("/api/purchases", createPurchaseRouter());
 app.use("/api/banking", createBankingRouter());
+app.get('/api/ollama/status', async (_req,res) => {try{res.json(await inspectLocalAi({url:process.env.OLLAMA_URL||OLLAMA_SETTINGS.url,model:OLLAMA_SETTINGS.model}));}catch(e){res.status(400).json({error:e.message});}});
+app.post('/api/ollama/start', async (req,res) => {
+ try{confirmLocalAiRequest(req.headers.origin,PORT,process.env.SELLQUANTA_DEV_UI_ORIGIN);}catch(e){return res.status(403).json({error:e.message});}
+ try{res.json(await startLocalAi({confirm:req.body?.confirm,url:process.env.OLLAMA_URL||OLLAMA_SETTINGS.url,model:OLLAMA_SETTINGS.model}));}catch(e){res.status(400).json({error:e.message});}
+});
 
 app.get("/api/state", (_req, res) => res.json(publicState(readDb())));
 
