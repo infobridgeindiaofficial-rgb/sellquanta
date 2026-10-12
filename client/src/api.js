@@ -21,6 +21,11 @@ async function backupDownload(path) {
 }
 
 export const api = {
+  bankingReport: filter => json('/banking?'+new URLSearchParams(filter)),
+  bankAudit: () => json('/banking/audit'),
+  saveBankSettlement: (body,id) => json('/banking/settlements'+(id?'/'+encodeURIComponent(id):''),{method:id?'PUT':'POST',body:JSON.stringify(body)}),
+  deleteBankSettlement: (id,body) => json('/banking/settlements/'+encodeURIComponent(id),{method:'DELETE',body:JSON.stringify(body)}),
+  exportBanking: filter => backupDownload('/banking/export?'+new URLSearchParams(filter)),
   receivePurchase: (requestId, invoice) => json('/purchases', {method:'POST',body:JSON.stringify({requestId,invoice})}),
   saveSupplier: (body, id) => json('/purchases/suppliers'+(id?'/'+encodeURIComponent(id):''), {method:id?'PUT':'POST',body:JSON.stringify(body)}),
   returnPurchase: body => json('/purchases/returns', {method:'POST',body:JSON.stringify(body)}),
