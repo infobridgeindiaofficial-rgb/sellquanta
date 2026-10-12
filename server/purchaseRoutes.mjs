@@ -52,7 +52,7 @@ export function createPurchaseRouter(){
  router.post('/suppliers',route((req,res)=>res.json(transaction(db=>saveSupplier(db,req.body)))));
  router.put('/suppliers/:id',route((req,res)=>res.json(transaction(db=>saveSupplier(db,req.body,req.params.id)))));
  router.post('/returns',route((req,res)=>res.json(transaction(db=>returnPurchase(db,req.body)))));
- router.get('/import-template',route((_req,res)=>sendWorkbook(res,purchaseTemplate(),'SellQuanta_Purchase_Template.xlsx',{template:true})));
+ router.get('/import-template',route((_req,res)=>sendWorkbook(res,purchaseTemplate(),'SellQuanta_Purchase_Template.xlsx',{template:true,reportName:'Bulk Purchase Import Template'})));
  router.post('/import-preview',route((req,res)=>res.json(previewPurchaseFile(readDb(),req.body.fileBase64))));
  router.post('/import',route((req,res)=>{
    const result=transaction(db=>{const preview=previewPurchaseFile(db,req.body.fileBase64);
@@ -61,8 +61,8 @@ export function createPurchaseRouter(){
      return receivePurchases(db,{requestId:req.body.requestId,invoices:preview.invoices,source:'excel'});
    });res.json(result);
  }));
- router.post('/error-report',route(async(req,res)=>{const preview=previewPurchaseFile(readDb(),req.body.fileBase64);await sendWorkbook(res,workbook('Errors',[[...PURCHASE_COLUMNS,'Excel Row','Error'],...preview.rows.filter(r=>r.error).map(r=>[r.date,r.supplierName,r.invoiceNumber,r.sku,r.name,r.qty,r.unitCost,r.lowStockLevel,r.notes,r.row,r.error])]),'SellQuanta_Purchase_Errors.xlsx');}));
+ router.post('/error-report',route(async(req,res)=>{const preview=previewPurchaseFile(readDb(),req.body.fileBase64);await sendWorkbook(res,workbook('Errors',[[...PURCHASE_COLUMNS,'Excel Row','Error'],...preview.rows.filter(r=>r.error).map(r=>[r.date,r.supplierName,r.invoiceNumber,r.sku,r.name,r.qty,r.unitCost,r.lowStockLevel,r.notes,r.row,r.error])]),'SellQuanta_Purchase_Errors.xlsx',{reportName:'Purchase Import Errors',period:'Validation of uploaded workbook'});}));
  router.get('/history',route((req,res)=>res.json(purchaseHistory(readDb(),req.query))));
- router.get('/history-export',route(async(req,res)=>{const report=purchaseHistory(readDb(),req.query);sendWorkbook(res,workbook('Purchase History',[['Purchase Date','Supplier Name','Invoice Number','Warehouse Product Code','Product Name','Quantity','Unit Cost','Total Cost','Returned Quantity','Status'],...report.lines.map(l=>[l.date,l.supplierName,l.invoiceNumber,l.sku,l.productName,l.qty,l.unitCost,l.totalCost,l.returnedQty,l.status])]),`SellQuanta_Purchases_${report.range.from}_${report.range.to}.xlsx`,{reportName:"Purchase History",period:`${report.range.from} - ${report.range.to} (UTC)`});}));
+ router.get('/history-export',route(async(req,res)=>{const report=purchaseHistory(readDb(),req.query);await sendWorkbook(res,workbook('Purchase History',[['Purchase Date','Supplier Name','Invoice Number','Warehouse Product Code','Product Name','Quantity','Unit Cost','Total Cost','Returned Quantity','Status'],...report.lines.map(l=>[l.date,l.supplierName,l.invoiceNumber,l.sku,l.productName,l.qty,l.unitCost,l.totalCost,l.returnedQty,l.status])]),`SellQuanta_Purchases_${report.range.from}_${report.range.to}.xlsx`,{reportName:"Purchase History",period:`${report.range.from} - ${report.range.to} (UTC)`});}));
  return router;
 }

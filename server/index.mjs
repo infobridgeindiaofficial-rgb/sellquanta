@@ -95,8 +95,8 @@ app.post("/api/business-reset", (req, res) => {
 
 // Export-only reads deliberately bypass readDb's missing-file initialization and
 // legacy normalization. These endpoints never save, migrate or back up the database.
-async function sendBackupWorkbook(res, workbook, filename) {
-  const buffer = await writeBrandedWorkbook(workbook);
+async function sendBackupWorkbook(res, workbook, filename, options = {}) {
+  const buffer = await writeBrandedWorkbook(workbook, options);
   res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
   res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
   res.setHeader("Access-Control-Expose-Headers", "Content-Disposition");
@@ -107,7 +107,7 @@ async function sendBackupWorkbook(res, workbook, filename) {
 app.get("/api/products/export-backup", async (_req, res) => {
   try {
     const db = JSON.parse(fs.readFileSync(paths.dbFile, "utf8"));
-    await sendBackupWorkbook(res, buildWarehouseBackup(db), `StockPilot_Warehouse_Backup_${backupDate()}.xlsx`);
+    await sendBackupWorkbook(res, buildWarehouseBackup(db), `StockPilot_Warehouse_Backup_${backupDate()}.xlsx`, {reportName:"Warehouse Stock Backup"});
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
 
@@ -117,7 +117,7 @@ app.get("/api/product-master/export-backup", async (req, res) => {
     const companyId = String(req.query.companyId || "");
     const workbook = buildCompanyMasterBackup(db, companyId);
     const company = db.companies.find(c => c.id === companyId);
-    sendBackupWorkbook(res, workbook, companyBackupFilename(company.name, backupDate()));
+    await sendBackupWorkbook(res, workbook, companyBackupFilename(company.name, backupDate()), {reportName:`Product Master Backup - ${company.name}`});
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
 
@@ -473,7 +473,7 @@ app.get("/api/products/import-template", async (_req, res) => {
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([["warehouse_product_code", "product_name", "COST PRICE", "OPENING STOCK"]]), "WAREHOUSE");
   res.setHeader("Content-Disposition", 'attachment; filename="StockPilot_Warehouse_Import_Template.xlsx"');
   res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-  res.send(await writeBrandedWorkbook(wb,{template:true}));
+  res.send(await writeBrandedWorkbook(wb,{template:true,reportName:"Warehouse Bulk Import Template"}));
 });
 
 app.post("/api/products/import-preview", (req, res) => {
@@ -575,7 +575,7 @@ app.get("/api/product-master/template", async (req, res) => {
     const fileName = `${company.name}_${req.query.marketplace}_Product_Master.xlsx`.replace(/[^\w.-]+/g, "_");
     res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-    res.send(await writeBrandedWorkbook(wb,{template:true}));
+    res.send(await writeBrandedWorkbook(wb,{template:true,reportName:`Product Master Import Template - ${company.name} / ${req.query.marketplace}`}));
   } catch (e) {
     res.status(400).json({ error: e.message });
   }

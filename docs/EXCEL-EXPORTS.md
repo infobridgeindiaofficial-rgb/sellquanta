@@ -42,3 +42,38 @@ currency/bands/freeze panes/filters/footers, distinct-order totals, every export
 route and all five reporting periods. It round-trips branded and legacy purchase
 templates with 400 rows, checks formula rejection and read-only template previews.
 Existing HTTP tests independently reconcile export records against isolated data.
+
+## Final export audit (12 October 2026)
+
+| Download route | Worksheets / coverage |
+| --- | --- |
+| `GET /api/reports/export` | Sales, Returns, Marketplace Summary, Agent Summary, Product Summary; daily, weekly, monthly, yearly and custom periods |
+| `GET /api/purchases/history-export` | Purchase History; all five period modes |
+| `GET /api/purchases/import-template` | Purchases; original nine required columns |
+| `POST /api/purchases/error-report` | Errors; original purchase columns plus Excel Row and Error |
+| `GET /api/products/export-backup` | WAREHOUSE; original saved data columns |
+| `GET /api/products/import-template` | WAREHOUSE; original import columns |
+| `GET /api/product-master/export-backup` | AMAZON, FLIPKART, MEESHO; original mapping data columns |
+| `GET /api/product-master/template` | PRODUCT_MASTER; each of the three marketplace scopes |
+
+No other active XLSX download was found in the server, frontend API client or
+Electron code. Historical files already stored in exports/backups are not rewritten.
+Database recovery backups are JSON copies made by `store.mjs`; their format and
+contents are unchanged. XLSX stock/master backups are export-only inventories,
+not database restoration files.
+
+The final audit fixes missing awaits for Product Master backup and Purchase History
+downloads so writer failures return JSON through existing route handlers and leave
+the backend healthy. It adds explicit template/backup/error-report titles, bold
+summary rows and a two-line title height. Business data builders remain unchanged.
+
+Six focused tests cover every route, 18 sample workbooks / 40 worksheets, legacy
+and branded template parsing, 400-row purchase uploads, empty periods and simulated
+writer failures. All 18 audit samples opened in Microsoft Excel 2010 without a
+repair prompt; native views confirm branding, headers, filters, INR amounts and
+the read-only backup/template layouts. The approved populated five-sheet example
+was also visually verified earlier in Excel 2010.
+
+Dependencies: this feature branch is based on Purchase Management (PR #3), which
+is based on Reports (PR #2) and Agent Wallet date filters (PR #1). No merge or
+release is part of this audit.
