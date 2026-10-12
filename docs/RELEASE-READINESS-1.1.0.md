@@ -75,11 +75,11 @@ Setup: install Standard → open Settings → skip Ollama installation if alread
 | Exact public backend → new backend | Fourteen synthetic collections preserved; not an installer upgrade |
 | Ollama running vision model | Synthetic image decoded correct order, SKU, quantity 2 and INR 249.50; no sale saved |
 | Ollama unavailable | Backend healthy, AI unreachable, no service started |
-| Staged website tests | Two focused tests passed; full site baseline 967/975 passed, same eight failures before/after changes |
+| Staged website tests | Two focused tests passed; `npm run build` then full tests: 969/977 passed, same eight failures as the 967/975 baseline |
 | Browser visual inspection | Not completed: computer-use approval timed out and in-app browser unavailable |
 | Production safety | Port 8787 owner unchanged; business file byte-for-byte unchanged |
 
-The website's eight pre-existing failures are in GST print, module-access guard (two), public Terms/Privacy (two), generated route/asset validation and sales dashboard (two). No unrelated website features were changed to conceal them.
+The website's eight pre-existing failures are in GST print, module-access guard (two), public Terms/Privacy (two), generated route/asset validation and sales dashboard (two). No unrelated website features were changed to conceal them. The upstream website also has stale generated snapshots: a whole-site build regenerates unrelated pages from existing source. Only SellQuanta source, tests, loopback preview binding and its four generated pages are prepared for review; other generated differences are not included in the feature commit. Website validation requires the normal build before tests. Review upstream source/snapshot drift before any live website deployment.
 
 **Release remains on HOLD** until a disposable Windows environment tests: fresh install without Ollama; manual upgrade from the verified public v1.0.2 installer with populated synthetic history/settings/images/backups; a real future-version auto-update over trusted HTTPS through download/confirmation/close/install/relaunch; cancellation/offline/tampered feed; uninstall/reinstall; backup and restoration; Defender/SmartScreen behavior. Also complete browser/responsive visual inspection, review remaining build advisories, resolve or explicitly assess pre-existing website failures, and verify the deployed feed only after publication is approved. None of these installer tests may run against the working business installation.
 
