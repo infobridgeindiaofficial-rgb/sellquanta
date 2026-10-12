@@ -157,11 +157,16 @@ test('multiple resets; a reset clears a hidden negative credit too; refund acros
   assert.equal(v.s.refunds.length, 2, 'refund history kept');
 });
 
-test('payments stay in history after Month Close archives them; reset state survives a server restart', async t => {
+test('payments in existing closed-month archives stay in history; reset state survives a server restart', async t => {
   const { app, agent, sell, pay, reset, view } = await setup(t);
   await sell(2);
   await pay(100, 'before month close');
-  await app.ok('/month-close', 'POST', { label: 'Sep' });
+  // Synthetic historical fixture: no new month-closing operation exists.
+  const fixture=app.read();
+  const archivedLedger=fixture.ledger.filter(l=>['SALE','PAYMENT'].includes(l.type));
+  fixture.monthCloseArchive.push({id:'historical-close',closedAt:new Date().toISOString(),label:'Sep',sales:[...fixture.todaySales,...fixture.salesHistory],ledger:archivedLedger,agentSummary:[]});
+  fixture.todaySales=[];fixture.salesHistory=[];fixture.ledger=fixture.ledger.filter(l=>!archivedLedger.includes(l));
+  fs.writeFileSync(app.file,JSON.stringify(fixture));
   let v = await view();
   assert.equal(v.s.ledger.filter(l => l.type === 'PAYMENT').length, 0, 'Month Close moves payments into the archive (unchanged)');
   assert.deepEqual(v.history.map(h => [h.type, h.amount, h.archived]), [['Payment Sent', 100, true]], 'archived payment still visible');

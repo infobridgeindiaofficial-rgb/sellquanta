@@ -11,7 +11,7 @@ for(const file of fs.readdirSync(path.join(project,'client/src')).filter(f=>/\.(
   let code=fs.readFileSync(path.join(project,'client/src',file),'utf8');
   if(file==='api.js') code='export const api=globalThis.__exportApi;';
   if(file==='pdf.js') code='export const fileToPdfPages=()=>{}; export const fileToImageDataUrls=()=>{};';
-  if(file==='App.jsx') code+='\nexport {Warehouse,ProductMaster,CloseDay};';
+  if(file==='App.jsx') code+='\nexport {Warehouse,ProductMaster,ReportsPage};';
   code=code.replace(/from (["'])\.\/([^"']+)\1/g,(_,q,name)=>`from ${q}./${name.replace(/\.(js|jsx)$/,'')}.mjs${q}`)
     .replace(/from (["'])react\1/g,`from '${pathToFileURL(path.join(project,'client/node_modules/react/index.js')).href}'`);
   fs.writeFileSync(path.join(compiled,file.replace(/\.(js|jsx)$/,'.mjs')),(await transform(code,{loader:file.endsWith('.jsx')?'jsx':'js',format:'esm'})).code);
@@ -23,7 +23,7 @@ const React=await import('../client/node_modules/react/index.js');
 const {act}=React;
 const {createRoot}=await import('../client/node_modules/react-dom/client.js');
 globalThis.__exportApi={};
-const {Warehouse,ProductMaster,CloseDay}=await import(pathToFileURL(path.join(compiled,'App.mjs')));
+const {Warehouse,ProductMaster,ReportsPage}=await import(pathToFileURL(path.join(compiled,'App.mjs')));
 const state={companies:[{id:'c1',name:'Company One'},{id:'c2',name:'Company Two'}],products:[],productMaster:[],stockMovements:[],todaySales:[],salesHistory:[],agents:[],accounts:[],ledger:[],refunds:[]};
 // Download buttons briefly change their text (Downloading / Downloaded / Download failed); data-label keeps the name.
 const button=text=>[...document.querySelectorAll('button')].find(b=>b.textContent===text||b.dataset.label===text);
@@ -89,15 +89,12 @@ test('all Warehouse and Product Master download buttons use the feedback pattern
   assert.deepEqual(view.downloads,['W.xlsx','SellQuanta_Warehouse_Import_Template.xlsx']);
 });
 
-test('Close Day: cancelling the confirmation shows no feedback and downloads nothing',async t=>{
-  const orig=window.confirm;window.confirm=()=>false;t.after(()=>{window.confirm=orig;});
-  globalThis.__exportApi.closeDay=async()=>assert.fail('must not run when cancelled');
-  const root=createRoot(document.getElementById('root'));
-  const s={...state,todaySales:[{id:'s',qty:1,saleAmount:10}],monthCloseArchive:[]};
-  globalThis.__exportApi.monthCloseList=async()=>({archives:[]});globalThis.__exportApi.backupInfo=async()=>({});
-  await act(async()=>root.render(React.createElement(CloseDay,{state:s,reload:async()=>{},notify:()=>{},busy:false,setBusy:()=>{},onBusinessReset:()=>{}})));
-  t.after(async()=>{await act(async()=>root.unmount());});
-  const b=byLabel('Export Excel + Reset Daily Sales');
-  await act(async()=>{b.click();});await act(async()=>{await sleep(0);});
-  assert.equal(b.textContent,'Export Excel + Reset Daily Sales');
+test('Reports export downloads without closing records; Backup and Danger Zone stay below reports',async t=>{
+ let exported;globalThis.__exportApi.exportReports=async filter=>{exported=filter;return {blob:new Blob(['report']),name:'Reports.xlsx'};};globalThis.__exportApi.backupInfo=async()=>({});
+ const root=createRoot(document.getElementById('root'));const s={...state,todaySales:[{id:'s',date:new Date().toISOString().slice(0,10),qty:1,saleAmount:10}],monthCloseArchive:[]};const before=JSON.stringify(s);
+ await act(async()=>root.render(React.createElement(ReportsPage,{state:s,notify:()=>{},onBusinessReset:()=>{}})));
+ t.after(async()=>{await act(async()=>root.unmount());});
+ const b=button('Export Excel');await click(b);assert.equal(exported.mode,'daily');assert.equal(b.textContent,'Downloaded');assert.equal(JSON.stringify(s),before);
+ assert.ok(!document.body.textContent.includes('Close Today'));assert.ok(!document.body.textContent.includes('Close Month'));
+ const text=document.body.textContent;assert.ok(text.indexOf('Data Backup')<text.indexOf('Danger Zone'));
 });

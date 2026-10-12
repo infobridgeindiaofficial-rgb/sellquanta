@@ -154,10 +154,10 @@ test('isolated HTTP reset then entirely new company/product/agent/mapping/sale/r
   for(const route of ['/products/export-backup',`/product-master/export-backup?companyId=${company.id}`,'/product-master/template?companyId='+company.id+'&marketplace=Amazon','/products/import-template']) {
     const r=await request(route);assert.equal(r.status,200);assert(XLSX.read(Buffer.from(await r.arrayBuffer()),{type:'buffer'}).SheetNames.length);
   }
-  assert.deepEqual((await ok('/month-close')).archives,[]);
-  const closeDay=await request('/close-day','POST');assert.equal(closeDay.status,200);await closeDay.arrayBuffer();
-  assert.equal((await ok('/state')).salesHistory.length,1);
-  const month=await ok('/month-close','POST',{});assert.equal(month.salesArchived,1);
-  assert.equal((await ok('/state')).salesHistory.length,0);
+  const beforeReports=fs.readFileSync(env.paths.dbFile);
+  assert.equal((await request('/month-close','POST',{})).status,404);
+  assert.equal((await request('/close-day','POST')).status,404);
+  const report=await request('/reports/export?mode=yearly&year='+sold.todaySales[0].date.slice(0,4));assert.equal(report.status,200);assert.equal(XLSX.read(Buffer.from(await report.arrayBuffer()),{type:'buffer'}).SheetNames.length,5);
+  assert(fs.readFileSync(env.paths.dbFile).equals(beforeReports));
   console.log(`Complete reset/fresh-start tested only in ${env.dir}`);
 });

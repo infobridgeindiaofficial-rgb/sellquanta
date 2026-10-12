@@ -17,7 +17,7 @@ The Windows installer is published on the [Releases page](https://github.com/inf
 - **Daily Sales** – record sales manually or scan shipping-label / invoice PDFs. A text-layer parser reads supported layouts; an optional local [Ollama](https://ollama.com) vision model can help with labels the parser cannot read. Quantities and amounts are checked before saving.
 - **Refunds** – refund a sale within the refund window, returning stock and adjusting the agent wallet.
 - **Agents & Wallet** – companies, agents and marketplace accounts, payments, wallet reset and payment history.
-- **Excel / Close Day / Month Close** – daily Excel exports, month-close archives and full backups.
+- **Reports** – read-only sales and returns reports for daily, weekly, monthly, yearly or custom periods, with five-sheet Excel export. Backups and Danger Zone remain available.
 
 Label layouts change over time. Scanning results must always be reviewed before saving; compatibility with any particular marketplace document format is not guaranteed.
 

@@ -48,7 +48,7 @@ async function mount(t,element) {
 }
 const empty=()=>({meta:{version:1},companies:[],agents:[],accounts:[],products:[],productMaster:[],todaySales:[],salesHistory:[],ledger:[],stockMovements:[],refunds:[],monthCloseArchive:[],dueByAgent:{}});
 async function stages() {
-  const closePage=button('Excel / Close Day');
+  const closePage=button('Reports');
   if(closePage) {
     assert(!document.querySelector('details'),'Danger Zone must not appear on Agents & Wallet');
     await click(closePage);
@@ -160,7 +160,7 @@ test('real App/API on copied business: reset, fresh company in Product Master, n
   await waitFor(()=>document.body.textContent.includes('1 sale'));
   await click(button('Dashboard'));assert(document.body.textContent.includes('TEST NEW COMPANY'));
   await click(button('Refunds'));assert(document.body.textContent.includes('NEW UI PRODUCT'));
-  await click(button('Excel / Close Day'));await waitFor(()=>button('Close Month'));assert(document.body.textContent.includes('Month Close'));
+  await click(button('Reports'));await waitFor(()=>button('Export Excel'));assert(document.body.textContent.includes('Sales & Returns Reports'));
   await api.exportWarehouseBackup();await api.exportCompanyBackup(company.id);
   const fresh=await api.state();assert.equal(fresh.companies.length,1);assert.equal(fresh.products.length,1);assert.equal(fresh.productMaster.length,1);
   assert.equal(fresh.todaySales.length,1);assert.equal(fresh.refunds.length,0);assert.equal(fresh.monthCloseArchive.length,0);
