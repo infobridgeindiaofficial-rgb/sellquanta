@@ -1,3 +1,4 @@
+import { agentWalletPeriod } from "./walletPeriod";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "./api";
 import { fileToImageDataUrls, fileToPdfPages } from "./pdf";
@@ -1091,6 +1092,8 @@ function CompanyManagement({ state, reload, notify }) {
 }
 
 function Agents({ state, reload, notify }) {
+  const [walletFilter,setWalletFilter]=useState({mode:"all",month:String(new Date().getUTCMonth()+1),year:String(new Date().getUTCFullYear()),from:"",to:""});
+  const setWalletField=(key,value)=>setWalletFilter(previous=>({...previous,[key]:value}));
   const activeCompanies = state.companies.filter(c => c.active !== false);
   const activeAgents = state.agents.filter(a => a.active !== false);
   const paymentAgents = activeAgents.filter(a => activeCompanies.some(c => c.id === a.companyId));
@@ -1127,8 +1130,9 @@ function Agents({ state, reload, notify }) {
 
   const viewAgent = state.agents.find(a => a.id === viewAgentId) || null;
   const lastReset = viewAgent ? latestWalletReset(state.walletResets, viewAgent.id) : null;
-  const bd = viewAgent ? agentWalletBreakdown(state, viewAgent.id, lastReset) : null;
-  const wt = viewAgent ? totals(viewAgent.id) : null;
+  const walletPeriod = viewAgent ? agentWalletPeriod(state,viewAgent.id,walletFilter) : null;
+  const bd = walletPeriod?.error ? {totals:{sales:0,qty:0},byProduct:[],byMarketplace:[],refundCount:0} : walletPeriod?.breakdown;
+  const wt = walletPeriod?.error ? {due:0,paid:0,pending:0} : walletPeriod;
 
   const resetWallet = async agent => {
     const w = totals(agent.id);
@@ -1259,14 +1263,26 @@ function Agents({ state, reload, notify }) {
         </div>
       </div>
 
+      <div className="wallet-period-filters" aria-label="Wallet date filters">
+        <label>Period<select aria-label="Wallet period" value={walletFilter.mode} onChange={e=>setWalletField('mode',e.target.value)}><option value="all">All Time</option><option value="monthly">Monthly</option><option value="custom">Custom Date Range</option></select></label>
+        {walletFilter.mode === 'monthly' && <><label>Month<select aria-label="Wallet month" value={walletFilter.month} onChange={e=>setWalletField('month',e.target.value)}>{Array.from({length:12},(_,i)=><option key={i+1} value={i+1}>{new Date(2020,i,1).toLocaleString('en-IN',{month:'long'})}</option>)}</select></label><label>Year<input aria-label="Wallet year" type="number" min="1900" max="9999" value={walletFilter.year} onChange={e=>setWalletField('year',e.target.value)}/></label></>}
+        {walletFilter.mode === 'custom' && <><label>From Date<input aria-label="Wallet from date" type="date" value={walletFilter.from} onChange={e=>setWalletField('from',e.target.value)}/></label><label>To Date<input aria-label="Wallet to date" type="date" value={walletFilter.to} onChange={e=>setWalletField('to',e.target.value)}/></label></>}
+        <small>UTC transaction dates · both dates included</small>
+      </div>
+      {walletPeriod.error && <p className="note" role="alert">{walletPeriod.error}</p>}
+      {!walletPeriod.error && <>
       <div className="stats" style={{border:0,borderBottom:"1px solid var(--line)",borderRadius:0,margin:0}}>
         <Stat label="Total Sales" value={<Money n={bd.totals.sales}/>} sub={`${bd.totals.qty} unit(s), net of refunds`} />
         <Stat label="Total Stock Cost Due" value={<Money n={wt.due}/>} />
         <Stat label="Total Paid / Wallet Credit" value={<Money n={wt.paid}/>} />
         <Stat label="Current Balance" value={<Money n={wt.pending}/>} className="primary" />
+        <Stat label="Total Units Sold" value={bd.totals.qty} sub="Net of refunds" />
+        <Stat label="Opening Balance" value={<Money n={wt.opening}/>} />
+        <Stat label="Closing Balance" value={<Money n={wt.closing}/>} sub="Signed balance; Current Balance retains the existing zero minimum" />
       </div>
 
       <div className="detail-sec">
+        {walletFilter.mode !== "all" && <p className="note">Opening balance + Stock Cost Due − Wallet Credit + baseline adjustments ({money(wt.adjustment)}) = Closing Balance. Wallet Reset and Month Close retain their existing effect.</p>}
         <h3 className="sub-h">Marketplace Breakdown</h3>
         {bd.byMarketplace.length
           ? <div className="table-wrap"><table className="table-dense"><thead><tr><th>Marketplace</th><th className="n">Qty Sold</th><th className="n">Stock Cost Due</th><th className="n">Sale Amount</th></tr></thead>
@@ -1290,13 +1306,15 @@ function Agents({ state, reload, notify }) {
 
       <div className="detail-sec">
         <h3 className="sub-h">Payment / Settlement History</h3>
-        {(() => { const hist = paymentHistory(state, viewAgent.id); return hist.length
+        {(() => { const hist = walletPeriod.history; return hist.length
           ? <div className="table-wrap"><table className="table-dense" id="payment-history"><thead><tr><th>Date &amp; Time</th><th>Type</th><th className="n">Amount</th><th>Note</th></tr></thead>
             <tbody>{hist.map(h=><tr key={h.id}>
               <td className="nowrap">{localDateTime(h.at, h.date)}</td><td><span className="badge tag">{h.type}</span>{h.archived && <span className="sub"> (month closed)</span>}</td><td className="n">{h.amount === null ? "—" : <Money n={h.amount}/>}</td><td className="sub wrap">{h.note}{h.type === "Wallet Reset" && typeof h.balanceBefore === "number" ? ` (balance before reset ${money(Math.max(0, h.balanceBefore))})` : ""}</td>
             </tr>)}</tbody></table></div>
           : <div className="empty">No payments or wallet resets for this agent yet.</div>; })()}
       </div>
+      {walletPeriod.transactions && <div className="detail-sec"><h3 className="sub-h">Related Transaction History</h3><div className="table-wrap"><table className="table-dense"><thead><tr><th>Date &amp; Time</th><th>Type</th><th className="n">Amount</th><th className="n">Balance Change</th><th>Note</th></tr></thead><tbody>{walletPeriod.transactions.length ? walletPeriod.transactions.map(t=><tr key={t.id}><td>{localDateTime(t.createdAt,t.day)}</td><td>{t.label}</td><td className="n"><Money n={t.amount}/></td><td className="n"><Money n={t.delta}/></td><td className="wrap">{t.note}</td></tr>) : <EmptyRow colSpan="5">No transactions for this period.</EmptyRow>}</tbody></table></div></div>}
+      </>}
     </Card>}
 
     <Card className="flush">
