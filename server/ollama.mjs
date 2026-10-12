@@ -1,9 +1,12 @@
-import { spawn } from "node:child_process";
+import { localOllamaUrl } from "./localAi.mjs";
 
-const OLLAMA_URL = process.env.OLLAMA_URL || "http://127.0.0.1:11434";
+let configurationError = null;
+let OLLAMA_URL = "http://127.0.0.1:11434";
+try { OLLAMA_URL = localOllamaUrl(process.env.OLLAMA_URL || OLLAMA_URL); }
+catch(e) { configurationError = e.message; }
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "qwen2.5vl:3b";
 
-let startAttempted = false;
+
 
 async function ping() {
   try {
@@ -17,28 +20,10 @@ async function ping() {
   }
 }
 
+// Read-only health check: optional AI never starts a background service implicitly.
 export async function ensureOllama() {
-  if (await ping()) return { ok: true, started: false };
-
-  if (!startAttempted) {
-    startAttempted = true;
-    try {
-      const child = spawn("ollama", ["serve"], {
-        detached: true,
-        stdio: "ignore",
-        windowsHide: true
-      });
-      // If Ollama is not installed the spawn fails with an "error" event; without this listener that event would crash the backend.
-      child.on("error", () => {});
-      child.unref();
-    } catch {}
-  }
-
-  for (let i = 0; i < 8; i++) {
-    await new Promise(r => setTimeout(r, 600));
-    if (await ping()) return { ok: true, started: true };
-  }
-  return { ok: false, started: false };
+  if(configurationError)return {ok:false,started:false,error:configurationError};
+  return {ok:await ping(),started:false};
 }
 
 function cleanJson(text) {

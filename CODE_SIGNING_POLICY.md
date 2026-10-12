@@ -28,4 +28,6 @@ All maintainers are expected to use multi-factor authentication on their GitHub 
 ## Privacy
 
 SellQuanta does not transfer any information to networked systems unless specifically requested by the user or the person installing or operating it.
-It stores business data only on the local computer. The optional Ollama integration communicates only with the Ollama server URL configured by the user (by default the local machine, `127.0.0.1`).
+It stores business data only on the local computer. The optional Ollama integration accepts loopback-only URLs on the local machine. Starting a service requires confirmation; SellQuanta never installs Ollama or downloads models automatically.
+
+The Windows release candidate checks update metadata at startup and every six hours over HTTPS with infobridgeindia.online and GitHub. Those providers receive normal connection information such as IP address; no business records or label images are uploaded. Download and installation require explicit confirmation. Update metadata is authenticated with an Ed25519 signature and installers are checked against signed SHA-256/SHA-512 digests. This is separate from Windows Authenticode; the candidate remains unsigned until a valid code-signing certificate is configured.

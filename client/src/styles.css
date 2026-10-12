@@ -491,3 +491,6 @@ body:has(.app-purchases){min-width:320px}
  .app-purchases main{padding:0 16px 24px}
  .app-purchases header{align-items:flex-start}
 }
+
+.settings-notes{white-space:pre-wrap;font:inherit;overflow-wrap:anywhere}.app-settings .card{overflow-wrap:anywhere}.app-settings ol{padding-left:24px}.app-settings li{margin-bottom:10px}.app-settings .inline{flex-wrap:wrap}body:has(.app-settings){min-width:320px}
+@media(max-width:700px){.app-settings{grid-template-columns:1fr}.app-settings>aside{position:static;height:auto}.app-settings nav{grid-template-columns:repeat(3,minmax(0,1fr))}.app-settings main{padding:0 16px 24px}}
