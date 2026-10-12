@@ -111,18 +111,13 @@ test('existing IDs/relationships survive load; fourth company can trade, rename,
   assert(!app.read().companies.some(c => c.id === unused.id));
   for (const c of live.companies) assert.deepEqual(app.read().companies.find(x => x.id === c.id), c);
 
-  // Existing Month Close rules still work, and a failed snapshot never resets data.
-  const snapshotDir = path.join(app.dir, 'backups/month-close');
-  fs.writeFileSync(snapshotDir, 'force archive failure');
-  const beforeClose = fs.readFileSync(app.file);
-  assert.equal((await app.request('/month-close', 'POST', {})).status, 400);
-  assert(fs.readFileSync(app.file).equals(beforeClose));
-  fs.unlinkSync(snapshotDir);
-  const closed = await app.ok('/month-close', 'POST', { label: 'Company compatibility test' });
-  const snapshot = JSON.parse(fs.readFileSync(path.join(app.dir, closed.file)));
-  assert.deepEqual(snapshot.sales, [...JSON.parse(beforeClose).todaySales, ...JSON.parse(beforeClose).salesHistory]);
-  assert.equal(app.read().todaySales.length, 0);
-  assert.equal(app.read().salesHistory.length, 0);
+  // Removed closing actions must be unavailable and leave existing records unchanged.
+  const beforeReports=fs.readFileSync(app.file);
+  assert.equal((await app.request('/month-close','POST',{})).status,404);
+  assert.equal((await app.request('/close-day','POST',{})).status,404);
+  assert.equal((await app.request('/reports/export?mode=yearly&year=2026')).status,200);
+  assert(fs.readFileSync(app.file).equals(beforeReports));
+
 });
 
 test('references in archives and other nested records prevent hard deletion', async t => {

@@ -67,17 +67,5 @@ export const api = {
   addPayment: body => json("/payments", { method: "POST", body: JSON.stringify(body) }),
   scanLabel: body => json("/label-scan", { method: "POST", body: JSON.stringify(body) }),
   scanDiagnostics: body => json("/scan-diagnostics", { method: "POST", body: JSON.stringify(body) }),
-  monthCloseList: () => json("/month-close"),
-  monthClose: (label = "") => json("/month-close", { method: "POST", body: JSON.stringify({ label }) }),
-  closeDay: async () => {
-    const r = await fetch(`${API}/close-day`, { method: "POST" });
-    if (!r.ok) {
-      const d = await r.json().catch(() => ({}));
-      throw new Error(d.error || "Close Day failed.");
-    }
-    const blob = await r.blob();
-    const cd = r.headers.get("Content-Disposition") || "";
-    const name = cd.match(/filename="([^"]+)"/)?.[1] || "SellQuanta-Daily.xlsx";
-    return { blob, name };
-  }
+  exportReports: filter => backupDownload('/reports/export?' + new URLSearchParams(filter).toString())
 };

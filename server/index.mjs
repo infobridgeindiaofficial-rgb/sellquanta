@@ -5,7 +5,7 @@ import path from "node:path";
 import XLSX from "xlsx";
 import { readDb, mutate, uid, paths, emptyDb, ensureAccounts, dedupeAgents, migrateSaleCosts, assignLegacyBatches, backfillSaleHistory, autoBackupOncePerDay, manualBackup, backupInfo } from "./store.mjs";
 import { ensureOllama, scanLabel, OLLAMA_SETTINGS } from "./ollama.mjs";
-import { buildDayWorkbook } from "./excel.mjs";
+import { buildReportsWorkbook } from "./reportExcel.mjs";
 import { buildWarehouseBackup, buildCompanyMasterBackup, companyBackupFilename, backupDate } from "./backupExports.mjs";
 import { createCompleteReset } from "./completeReset.mjs";
 
@@ -971,128 +971,16 @@ app.get("/api/ollama-info", async (_req, res) => {
   res.json({ ...OLLAMA_SETTINGS, status: await ensureOllama() });
 });
 
-app.post("/api/close-day", (_req, res) => {
+// Report export is read-only: generate in memory without saveDb, mutate or disk exports.
+app.get("/api/reports/export", (req, res) => {
   try {
-    const db = readDb();
-    const sales = [...db.todaySales];
-    if (!sales.length) return res.status(400).json({ error: "No daily sales to export." });
-
-    const wb = buildDayWorkbook(db, sales);
-    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-    const fileName = `StockPilot-Daily-${stamp}.xlsx`;
-    const diskPath = path.join(paths.exportDir, fileName);
-    XLSX.writeFile(wb, diskPath);
-
-    mutate(live => {
-      // Move today's sales into the permanent Sales History. A sale already in history is never added twice, and stock is not touched.
-      const archived = new Set(live.salesHistory.map(s => s.id));
-      live.salesHistory.push(...live.todaySales.filter(s => !archived.has(s.id)).map(s => ({ ...s, archivedAt: new Date().toISOString() })));
-      live.todaySales = [];
-    });
-
-    res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
-    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-    fs.createReadStream(diskPath).pipe(res);
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-// ---- Month Close -----------------------------------------------------------------------------------------------
-// Archives the ENTIRE currently active Sales + Wallet period - every sale in todaySales and salesHistory, and every
-// SALE/PAYMENT ledger entry - into one permanent, read-only snapshot, then empties todaySales, salesHistory and
-// those ledger entries so the next month starts fresh. Releasing old Order IDs is a direct side effect of that: the
-// duplicate check in POST /api/sales above only ever looks at todaySales + salesHistory, so once a sale is archived
-// out of both, its Order ID is no longer "already saved" and a label with that same Order ID can be scanned again.
-//
-// Left completely untouched: Product Master, warehouse products/stock, stock movements, refunds (their own
-// collection and their own 10-day logic), companies, agents, accounts, and any SETTLEMENT (Reset Wallet) ledger
-// entries - none of those are SALE or PAYMENT type, so the filter below never touches them.
-//
-// Safety ("archive first, verify, only then reset, or reset nothing"): the snapshot is written to its own file on
-// disk and read back to confirm it matches, BEFORE any active record is touched - all inside the mutate() callback
-// below. mutate() only calls saveDb() if that callback returns normally; if the disk write/verify (or anything else
-// in here) throws, saveDb() never runs, so stockpilot.json is not written at all and every active record is exactly
-// as it was. The on-disk file is a redundant safety copy only - the app reads the archive from monthCloseArchive.
-function writeMonthCloseSnapshotFile(archive) {
-  const dir = path.join(paths.backupDir, "month-close");
-  fs.mkdirSync(dir, { recursive: true });
-  const file = path.join(dir, `${archive.id}.json`);
-  const text = JSON.stringify(archive, null, 2);
-  const temp = `${file}.tmp`;
-  try {
-    fs.writeFileSync(temp, text, "utf8");
-    if (fs.readFileSync(temp, "utf8") !== text) throw new Error("snapshot copy did not verify");
-    fs.renameSync(temp, file);
-  } catch (e) {
-    try { fs.unlinkSync(temp); } catch {}
-    throw new Error(`Month Close snapshot could not be written safely (${e.message}). Nothing was reset.`);
-  }
-  // Independent re-read, the actual verification step, from the final renamed file.
-  const verify = JSON.parse(fs.readFileSync(file, "utf8"));
-  if (verify.sales.length !== archive.sales.length || verify.ledger.length !== archive.ledger.length) {
-    throw new Error("Month Close snapshot failed verification after writing. Nothing was reset.");
-  }
-  return path.relative(paths.root, file).replace(/\\/g, "/");
-}
-
-app.get("/api/month-close", (_req, res) => {
-  const db = readDb();
-  res.json({
-    archives: (db.monthCloseArchive || []).map(a => ({
-      id: a.id, closedAt: a.closedAt, label: a.label || "",
-      salesCount: a.sales.length, ledgerCount: a.ledger.length, agentSummary: a.agentSummary, file: a.file
-    })).reverse() // newest first
-  });
-});
-
-app.post("/api/month-close", (req, res) => {
-  try {
-    const result = mutate(db => {
-      const sales = [...db.todaySales, ...db.salesHistory];
-      if (!sales.length) throw new Error("Nothing to close: there are no active sales.");
-      const ledgerToArchive = db.ledger.filter(l => l.type === "SALE" || l.type === "PAYMENT");
-      const archivedLedgerIds = new Set(ledgerToArchive.map(l => l.id));
-
-      // Per-agent Sales Due / Paid / Balance for this closed period only, computed the SAME way the live wallet
-      // does (SUM of SALE ledger amounts minus SUM of PAYMENT ledger amounts) - so it reconciles with what the
-      // Agent Wallet Details panel showed for these exact entries right before the close. Left unclamped (unlike
-      // the live "never negative" balance) since this is a historical record, not something anyone still owes.
-      const byAgent = new Map();
-      for (const l of ledgerToArchive) {
-        const row = byAgent.get(l.agentId) || { due: 0, paid: 0 };
-        if (l.type === "SALE") row.due += num(l.amount);
-        if (l.type === "PAYMENT") row.paid += num(l.amount);
-        byAgent.set(l.agentId, row);
-      }
-      const agentSummary = [...byAgent.entries()].map(([agentId, v]) => {
-        const agent = db.agents.find(a => a.id === agentId);
-        const company = db.companies.find(c => c.id === agent?.companyId);
-        const due = Math.round(v.due * 100) / 100, paid = Math.round(v.paid * 100) / 100;
-        return { agentId, agentName: agent?.name || "(removed agent)", companyId: agent?.companyId || "", companyName: company?.name || "", due, paid, balance: Math.round((due - paid) * 100) / 100 };
-      }).sort((a, b) => a.agentName.localeCompare(b.agentName));
-
-      const archive = {
-        id: uid("close"),
-        closedAt: new Date().toISOString(),
-        label: String(req.body?.label || "").trim(),
-        sales: sales.map(s => ({ ...s })),
-        ledger: ledgerToArchive.map(l => ({ ...l })),
-        agentSummary
-      };
-      archive.file = writeMonthCloseSnapshotFile(archive); // throws (aborting this whole mutate) if it can't be verified on disk
-
-      (db.monthCloseArchive ||= []).push(archive);
-      db.todaySales = [];
-      db.salesHistory = [];
-      db.ledger = db.ledger.filter(l => !archivedLedgerIds.has(l.id));
-
-      return { id: archive.id, closedAt: archive.closedAt, salesArchived: archive.sales.length, ledgerArchived: archive.ledger.length, agentSummary, file: archive.file };
-    });
-    res.json(result);
-  } catch (e) {
-    res.status(400).json({ error: e.message });
-  }
+    const filter=Object.fromEntries(['mode','date','month','year','from','to'].map(key=>[key,typeof req.query[key]==='string'?req.query[key]:undefined]));
+    const { workbook, report }=buildReportsWorkbook(readDb(),filter);
+    const bytes=XLSX.write(workbook,{bookType:'xlsx',type:'buffer'});
+    res.setHeader('Content-Type','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition',`attachment; filename="SellQuanta-Reports-${report.range.from}-${report.range.to}.xlsx"`);
+    res.send(bytes);
+  } catch(error) { res.status(400).json({error:error.message}); }
 });
 
 // SellQuanta desktop app: serve the built screen (client/dist, made by "npm --prefix client run build") from this same local address,

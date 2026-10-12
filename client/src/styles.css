@@ -440,3 +440,12 @@ button.qty-ok { margin-top: 4px; height: 24px; padding: 0 8px; font-size: 11.5px
 .wallet-period-filters label { flex:1 1 160px; max-width:240px; }
 .wallet-period-filters small { flex:1 1 100%; color:var(--ink-3); }
 @media (max-width:600px) { .wallet-period-filters label { max-width:none; } }
+
+/* Read-only reports dashboard */
+.report-filters { display:flex; flex-wrap:wrap; gap:12px; padding:16px 18px; align-items:end; }
+.report-filters label { flex:1 1 170px; max-width:260px; }
+.report-filters small { flex:1 1 100%; color:var(--ink-3); }
+.report-stats { grid-template-columns:repeat(3,minmax(0,1fr)); }
+.report-chart { width:100%; height:auto; color:var(--ink); }
+@media (max-width:700px) { .report-stats { grid-template-columns:repeat(2,minmax(0,1fr)); } .report-filters label { max-width:none; } }
+@media (max-width:400px) { .report-stats { grid-template-columns:1fr; } }

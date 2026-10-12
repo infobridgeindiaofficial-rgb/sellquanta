@@ -1,0 +1,36 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import net from 'node:net';
+import crypto from 'node:crypto';
+import {spawn} from 'node:child_process';
+import XLSX from 'xlsx';
+
+test('live reports export is read-only; closing APIs removed; backups and reset safeguards retained',async t=>{
+ const project=path.resolve(import.meta.dirname,'..');fs.mkdirSync(path.join(project,'tmp'),{recursive:true});
+ const dir=fs.mkdtempSync(path.join(project,'tmp/reports-http-'));fs.mkdirSync(path.join(dir,'data'));
+ const file=path.join(dir,'data/stockpilot.json');
+ const sale={id:'sale',date:'2026-10-01',agentId:'a',companyId:'c',productId:'p',marketplace:'Amazon',qty:2,saleAmount:100,unitCost:10,costTotal:20,orderId:'test-order'};
+ const db={meta:{version:1},companies:[{id:'c',name:'Test company'}],agents:[{id:'a',name:'Test agent',companyId:'c'}],accounts:[],products:[{id:'p',sku:'TEST',name:'Test product',stock:99,costPrice:10}],productMaster:[],todaySales:[sale],salesHistory:[],ledger:[{id:'sale-ledger',agentId:'a',type:'SALE',amount:20,referenceId:'sale',costBasis:true,date:'2026-10-01'}],stockMovements:[],refunds:[{id:'refund',saleId:'sale',agentId:'a',productId:'p',marketplace:'Amazon',qty:1,refundAmount:50,refundDate:'2026-10-02'}],walletResets:[],monthCloseArchive:[{id:'archive',sales:[sale],ledger:[],closedAt:'2026-10-03T00:00:00Z'}]};
+ fs.writeFileSync(file,JSON.stringify(db));
+ const socket=net.createServer();await new Promise(resolve=>socket.listen(0,'127.0.0.1',resolve));const port=socket.address().port;await new Promise(resolve=>socket.close(resolve));
+ const child=spawn(process.execPath,[path.join(project,'server/index.mjs')],{cwd:project,env:{...process.env,PORT:String(port),SELLQUANTA_DATA_ROOT:dir,SELLQUANTA_CLIENT_DIST:path.join(dir,'no-client-dist')},windowsHide:true,stdio:'ignore'});
+ t.after(async()=>{if(child.exitCode===null)await new Promise(resolve=>{child.once('exit',resolve);child.kill();});});
+ const request=(route,method='GET')=>fetch(`http://127.0.0.1:${port}/api${route}`,{method});
+ let ready=false;for(let i=0;i<100;i++){try{if((await request('/server-info')).ok){ready=true;break;}}catch{}await new Promise(resolve=>setTimeout(resolve,50));}assert.ok(ready,'isolated server ready');
+ const stateBefore=await (await request('/state')).json();
+ const snapshot=()=>{const out={};const walk=folder=>{if(!fs.existsSync(folder))return;for(const entry of fs.readdirSync(folder,{withFileTypes:true})){const full=path.join(folder,entry.name);if(entry.isDirectory())walk(full);else out[path.relative(dir,full)]=crypto.createHash('sha256').update(fs.readFileSync(full)).digest('hex');}};for(const name of ['data','backups','exports'])walk(path.join(dir,name));return out;};
+ const before=snapshot();
+ const response=await request('/reports/export?mode=monthly&month=2026-10');assert.equal(response.status,200);assert.match(response.headers.get('content-disposition'),/2026-10-01-2026-10-31/);
+ const workbook=XLSX.read(Buffer.from(await response.arrayBuffer()),{type:'buffer'});
+ assert.deepEqual(workbook.SheetNames,['Sales','Returns','Marketplace Summary','Agent Summary','Product Summary']);
+ assert.equal(XLSX.utils.sheet_to_json(workbook.Sheets.Sales).length,1,'duplicate archive sale not exported twice');
+ assert.equal(XLSX.utils.sheet_to_json(workbook.Sheets['Agent Summary'])[0]['Net Sales'],50);
+ assert.equal((await request('/reports/export?mode=custom&from=2026-11-01&to=2026-10-01')).status,400);
+ for(const route of ['/close-day','/month-close'])assert.equal((await request(route,'POST')).status,404);
+ assert.equal((await request('/backup-info')).status,200);
+ assert.equal((await request('/business-reset','POST')).status,400,'unchanged reset safeguards reject missing confirmation');
+ assert.deepEqual(await (await request('/state')).json(),stateBefore,'stock, wallet balances and all financial records unchanged');
+ assert.deepEqual(snapshot(),before,'report generation never changes database, backups or exports');
+});

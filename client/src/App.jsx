@@ -1,3 +1,4 @@
+import ReportsDashboard from "./ReportsDashboard";
 import { agentWalletPeriod } from "./walletPeriod";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "./api";
@@ -72,7 +73,7 @@ function Stat({ label, value, sub, className = "" }) {
   return <Card className={`stat ${className}`.trim()}><div className="stat-label">{label}</div><div className="stat-value">{value}</div>{sub && <div className="muted">{sub}</div>}</Card>;
 }
 
-const NAV_ICON = { dashboard:"dashboard", sales:"scan", warehouse:"box", master:"link", agents:"wallet", refunds:"refund", close:"sheet" };
+const NAV_ICON = { dashboard:"dashboard", sales:"scan", warehouse:"box", master:"link", agents:"wallet", refunds:"refund", reports:"sheet" };
 const PAGE_SUBTITLE = {
   dashboard: "Business performance across companies, marketplaces and inventory.",
   sales: "Scan shipping labels, resolve mappings and record today's sales.",
@@ -80,14 +81,13 @@ const PAGE_SUBTITLE = {
   master: "Map marketplace SKUs to warehouse products.",
   agents: "Track agent stock cost, payments and outstanding balances.",
   refunds: "Process eligible refunds and review refund history.",
-  close: "Export and close the current day's sales safely."
+  reports: "Sales and returns reports across current and archived records."
 };
 
 export default function App() {
   const [tab, setTab] = useState("dashboard");
   const [state, setState] = useState(null);
   const [health, setHealth] = useState({ ollama: { ok: false } });
-  const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const businessGeneration = useRef(0);
   const [viewGeneration, setViewGeneration] = useState(0);
@@ -107,7 +107,7 @@ export default function App() {
         try { window[storage].removeItem(key); } catch {}
       }
     }
-    setState(result.state); setTab("agents"); setBusy(false);
+    setState(result.state); setTab("agents");
     setViewGeneration(businessGeneration.current);
     setMsg(`Complete Reset successful. Full backup preserved: ${result.backup}`);
     void reload().catch(e => setMsg(`Reset succeeded; could not refresh: ${e.message}. Full backup: ${result.backup}`));
@@ -144,7 +144,7 @@ export default function App() {
             ["master","Product Master"],
             ["agents","Agents & Wallet"],
             ["refunds","Refunds"],
-            ["close","Excel / Close Day"]
+            ["reports","Reports"]
           ].map(([id,label]) => (
             <button key={id} onClick={() => setTab(id)} className={tab === id ? "active" : ""} aria-current={tab === id ? "page" : undefined}><Icon name={NAV_ICON[id]} size={16} strokeWidth={1.75}/>{label}</button>
           ))}
@@ -166,7 +166,7 @@ export default function App() {
               master:"Product Master",
               agents:"Agents & Wallet",
               refunds:"Refunds",
-              close:"Excel / Close Day"
+              reports:"Reports"
             }[tab]}</h1>
             <p>{PAGE_SUBTITLE[tab]}</p>
           </div>
@@ -186,7 +186,7 @@ export default function App() {
         {tab === "master" && <ProductMaster state={state} reload={reload} notify={notify} />}
         {tab === "agents" && <Agents state={state} reload={reload} notify={notify} />}
         {tab === "refunds" && <Refunds state={state} reload={reload} notify={notify} />}
-        {tab === "close" && <CloseDay state={state} reload={reload} notify={notify} busy={busy} setBusy={setBusy} onBusinessReset={businessResetCompleted} />}
+        {tab === "reports" && <ReportsPage state={state} notify={notify} onBusinessReset={businessResetCompleted} />}
       </main>
     </div>
   );
@@ -1374,109 +1374,12 @@ function Refunds({ state, reload, notify }) {
   </>;
 }
 
-function CloseDay({ state, reload, notify, busy, setBusy, onBusinessReset }) {
-  const qty = state.todaySales.reduce((a,s)=>a+Number(s.qty||0),0);
-  const amount = state.todaySales.reduce((a,s)=>a+Number(s.saleAmount||0),0);
-
-  const close = async () => {
-    if (!window.confirm("Export today's Excel and clear ONLY the Daily Sales screen? Warehouse, agents, ledger and history will stay saved.")) return false;
-    setBusy(true);
-    try {
-      const {blob,name} = await api.closeDay();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a"); a.href=url; a.download=name; a.click();
-      setTimeout(()=>URL.revokeObjectURL(url),1000);
-      await reload();
-      notify("Day closed. Excel saved. Daily Sales reset only.");
-    } catch(e){notify(e.message); throw e;}
-    finally{setBusy(false);}
-  };
-
+function ReportsPage({state,notify,onBusinessReset}) {
   return <>
-  <Card className="flush close-card">
-    <div className="close-grid">
-      <section>
-        <div className="close-title"><span className="big-icon"><Icon name="sheet" size={18}/></span><h2>Close Today's Sales</h2></div>
-        <p>Creates Excel with Daily Sales, Agent Summary, Product Usage and current Warehouse Stock.</p>
-        <div className="close-stats"><span><b>{state.todaySales.length}</b> orders</span><span><b>{qty}</b> quantity</span><span><b><Money n={amount}/></b> sales</span></div>
-        <DownloadButton action={close} label="Export Excel + Reset Daily Sales" busyLabel="Closing…" className="primary big" iconSize={16} disabled={busy || !state.todaySales.length}/>
-        {!busy && !state.todaySales.length && <p className="disabled-why">No sales to close today.</p>}
-      </section>
-      <section>
-        <h3 className="sub-h" style={{padding:"0 0 10px"}}>What happens</h3>
-        <ul className="close-list">
-          <li><Icon name="sheet" size={15}/><span>An Excel file is exported for today.</span></li>
-          <li><Icon name="refund" size={15}/><span>Only the Daily Sales screen is cleared.</span></li>
-        </ul>
-        <div className="safe-note"><Icon name="shield" size={15}/><span>Permanent data stays safe: warehouse stock, products, agents, accounts, wallet ledger, stock movements and archived sales.</span></div>
-      </section>
-    </div>
-  </Card>
-  <MonthCloseCard state={state} reload={reload} notify={notify} />
-  <BackupCard notify={notify} />
-  <CompleteReset onComplete={onBusinessReset} />
+    <ReportsDashboard state={state} notify={notify} Card={Card} Stat={Stat} Money={Money} Mkt={Mkt} DownloadButton={DownloadButton}/>
+    <BackupCard notify={notify}/>
+    <CompleteReset onComplete={onBusinessReset}/>
   </>;
-}
-
-// Archives the ENTIRE currently active Sales + Wallet period (today's sales, all of Sales History, and every SALE /
-// PAYMENT ledger entry) into a permanent, read-only snapshot, then resets those so the next month starts fresh -
-// including releasing old Order IDs from duplicate detection. See server /api/month-close for exactly what is, and
-// is not, touched. Warehouse, Product Master, agents/accounts/companies, refunds and stock are never touched here.
-function MonthCloseCard({ state, reload, notify }) {
-  const [busy, setBusy] = useState(false);
-  const [archives, setArchives] = useState(null);
-  const [open, setOpen] = useState(false);
-
-  const load = () => api.monthCloseList().then(r => setArchives(r.archives)).catch(() => {});
-  useEffect(() => { load(); }, []);
-
-  const activeSales = state.todaySales.length + state.salesHistory.length;
-  const activeQty = [...state.todaySales, ...state.salesHistory].reduce((t, s) => t + Number(s.qty || 0), 0);
-  const activeAmount = [...state.todaySales, ...state.salesHistory].reduce((t, s) => t + Number(s.saleAmount || 0), 0);
-
-  const closeMonth = async () => {
-    const question = `Close Month?\n\n`
-      + `This will archive ${activeSales} active sale(s) (${money(activeAmount)}, ${activeQty} unit(s)) and the agent wallet's Sales/Payment entries into a permanent, read-only record.\n\n`
-      + `After that:\n`
-      + `• Daily Sales and Sales History are emptied - old Order IDs become free to scan/add again.\n`
-      + `• Every agent's Sales Due / Paid / Balance restarts from ₹0.\n\n`
-      + `Warehouse stock, Product Master, agents, accounts, companies and refunds are NOT changed. Archived sales stay permanently visible below, read-only.\n\n`
-      + `This cannot be undone from the app. Continue?`;
-    if (!window.confirm(question)) return;
-    setBusy(true);
-    try {
-      const r = await api.monthClose();
-      await reload();
-      await load();
-      notify(`Month closed: ${r.salesArchived} sale(s) archived. Sales and Wallet are reset for the new active period.`);
-    } catch (e) { notify(e.message); }
-    finally { setBusy(false); }
-  };
-
-  return <Card className="flush">
-    <div className="ph"><h3>Month Close</h3>
-      <div className="acts"><button className="ghost" disabled={busy || !activeSales} onClick={closeMonth}><Icon name="archive" size={15}/>{busy ? "Closing…" : "Close Month"}</button></div>
-    </div>
-    <div className="pb">
-      <p className="muted" style={{margin:"0 0 6px",lineHeight:1.55}}>Archives the current active Sales and Agent Wallet period permanently, then starts the next month fresh. Use this occasionally (e.g. once a month) - Daily "Export Excel + Reset Daily Sales" above stays for everyday use and does not touch the wallet.</p>
-      {activeSales > 0 && <p className="kv-line" style={{margin:0}}><span>Currently active: <b>{activeSales}</b> sale(s) · <b>{activeQty}</b> unit(s) · <b>{money(activeAmount)}</b></span></p>}
-      {archives && archives.length > 0 && <div style={{marginTop:12}}>
-        <button className="quiet sm" onClick={()=>setOpen(o=>!o)}><Icon name="chevron" size={13} className={open ? "rot90" : ""}/>{open ? "Hide" : "Show"} closed months ({archives.length})</button>
-      </div>}
-    </div>
-    {archives && archives.length > 0 && open && <div className="table-wrap" style={{borderTop:"1px solid var(--line)"}}><table className="table-dense"><thead><tr><th>Closed</th><th className="n">Sales</th><th className="n">Agents</th><th className="n">Total Due</th><th className="n">Total Paid</th><th className="n">Balance</th></tr></thead>
-      <tbody>{archives.map(a=>{
-        const totals = a.agentSummary.reduce((t,x)=>({due:t.due+x.due,paid:t.paid+x.paid,balance:t.balance+x.balance}),{due:0,paid:0,balance:0});
-        return <tr key={a.id} className="is-archived">
-          <td className="nowrap">{new Date(a.closedAt).toLocaleString("en-IN")}</td>
-          <td className="n">{a.salesCount}</td>
-          <td className="n">{a.agentSummary.length}</td>
-          <td className="n"><Money n={totals.due}/></td>
-          <td className="n"><Money n={totals.paid}/></td>
-          <td className="n"><Money n={totals.balance}/></td>
-        </tr>;
-      })}</tbody></table></div>}
-  </Card>;
 }
 
 // Data safety: shows the automatic daily backups and lets you take an extra backup right now.
