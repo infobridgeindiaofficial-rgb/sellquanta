@@ -28,27 +28,43 @@ const state={companies:[{id:'c1',name:'Company One'},{id:'c2',name:'Company Two'
 // Download buttons briefly change their text (Downloading / Downloaded / Download failed); data-label keeps the name.
 const button=text=>[...document.querySelectorAll('button')].find(b=>b.textContent===text||b.dataset.label===text);
 const click=async el=>{assert(el);await act(async()=>el.click());};
-async function mount(t,Component) {
+async function mount(t,Component,viewState=state) {
   const root=createRoot(document.getElementById('root')),downloads=[],errors=[];
-  const before=JSON.stringify(state);
+  const before=JSON.stringify(viewState);
   const originalCreate=URL.createObjectURL,originalRevoke=URL.revokeObjectURL;
   URL.createObjectURL=()=> 'blob:test';URL.revokeObjectURL=()=>{};
   window.HTMLAnchorElement.prototype.click=function(){downloads.push(this.download);};
-  await act(async()=>root.render(React.createElement(Component,{state,reload:()=>assert.fail('Export must not reload or save records'),notify:e=>errors.push(e)})));
-  t.after(async()=>{await act(async()=>root.unmount());localStorage.clear();URL.createObjectURL=originalCreate;URL.revokeObjectURL=originalRevoke;assert.equal(JSON.stringify(state),before);});
+  await act(async()=>root.render(React.createElement(Component,{state:viewState,reload:()=>assert.fail('Export must not reload or save records'),notify:e=>errors.push(e)})));
+  t.after(async()=>{await act(async()=>root.unmount());localStorage.clear();URL.createObjectURL=originalCreate;URL.revokeObjectURL=originalRevoke;assert.equal(JSON.stringify(viewState),before);});
   return {downloads,errors};
 }
-test('Warehouse export button downloads a single workbook and recovers from request failure',async t=>{
+test('Warehouse is read-only, preserves images and summaries, and searches active stock by name or code',async t=>{
   let calls=0;
-  globalThis.__exportApi.exportWarehouseBackup=async()=>{calls++;return {blob:new Blob(),name:'StockPilot_Warehouse_Backup_2026-09-23.xlsx'};};
-  const view=await mount(t,Warehouse);
-  await click(button('Export Warehouse Backup'));
-  assert.equal(calls,1);assert.deepEqual(view.downloads,['StockPilot_Warehouse_Backup_2026-09-23.xlsx']);
-  assert(button('Download Excel Template'));assert(button('Upload Excel'));
-  globalThis.__exportApi.exportWarehouseBackup=async()=>{throw Error('Export failed');};
-  await click(button('Export Warehouse Backup'));
-  assert.deepEqual(view.errors,['Export failed']);assert.equal(button('Export Warehouse Backup').disabled,false);
+  for(const method of ['exportWarehouseBackup','addProduct','updateProduct','removeProduct','setProductImage','adjustStock','productImportTemplate','previewProductImport','importProducts']) globalThis.__exportApi[method]=()=>{calls++;assert.fail('Warehouse must not call management or export APIs');};
+  const fixture={...state,products:[
+    {id:'p1',sku:'CODE-1',name:'Blue Shirt',costPrice:100,stock:8,lowStockLevel:5,image:'data:image/png;base64,aA=='},
+    {id:'p2',sku:'CODE-2',name:'Red Shirt',costPrice:50,stock:2,lowStockLevel:3},
+    {id:'p3',sku:'CODE-3',name:'Hat',costPrice:20,stock:0},
+    {id:'archived',sku:'OLD',name:'Archived Product',costPrice:500,stock:99,active:false}
+  ],stockMovements:[{id:'movement',productId:'p1',qty:8}]};
+  await mount(t,Warehouse,fixture);
+  const metric=label=>[...document.querySelectorAll('.stat')].find(el=>el.querySelector('.stat-label')?.textContent===label).querySelector('.stat-value').textContent;
+  assert.equal(metric('Total Products'),'3');assert.equal(metric('Total Stock Units'),'10');assert.ok(metric('Current Stock Value').includes('900'));
+  assert.equal(document.querySelector('tbody').rows.length,3);
+  assert.equal(document.querySelector('tbody img').getAttribute('src'),fixture.products[0].image);
+  assert.ok(document.body.textContent.includes('Low stock'));assert.ok(document.body.textContent.includes('Out of stock'));
+  assert.ok(!document.body.textContent.includes('Archived Product'));
+  for(const text of ['Manual Product Entry','Bulk Import Products','Stock In / Adjustment','Add Product','Update Product','Upload Excel','Download Excel Template','Export Warehouse Backup','Actions'])assert.ok(!document.body.textContent.includes(text));
+  assert.equal(document.querySelectorAll('button,input[type=file],input[type=number],select').length,0);
+  const search=document.querySelector('[aria-label="Search warehouse products"]');
+  const change=async value=>{await act(async()=>{Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype,'value').set.call(search,value);search.dispatchEvent(new dom.window.Event('input',{bubbles:true}));});};
+  await change('  bLuE  ');assert.equal(document.querySelector('tbody').rows.length,1);assert.ok(document.querySelector('tbody').textContent.includes('Blue Shirt'));
+  assert.equal(metric('Total Stock Units'),'10');assert.ok(metric('Current Stock Value').includes('900'));
+  await change('code-2');assert.ok(document.querySelector('tbody').textContent.includes('Red Shirt'));
+  await change('no match');assert.ok(document.querySelector('tbody').textContent.includes('No products match your search.'));
+  await change('');assert.equal(document.querySelector('tbody').rows.length,3);assert.equal(calls,0);
 });
+
 test('Company export requires only selected company, uses latest selection, and downloads one workbook',async t=>{
   const calls=[];
   globalThis.__exportApi.exportCompanyBackup=async id=>{calls.push(id);return {blob:new Blob(),name:`${id}.xlsx`};};

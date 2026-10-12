@@ -21,6 +21,19 @@ async function backupDownload(path) {
 }
 
 export const api = {
+  receivePurchase: (requestId, invoice) => json('/purchases', {method:'POST',body:JSON.stringify({requestId,invoice})}),
+  saveSupplier: (body, id) => json('/purchases/suppliers'+(id?'/'+encodeURIComponent(id):''), {method:id?'PUT':'POST',body:JSON.stringify(body)}),
+  returnPurchase: body => json('/purchases/returns', {method:'POST',body:JSON.stringify(body)}),
+  purchaseTemplate: () => backupDownload('/purchases/import-template'),
+  previewPurchases: fileBase64 => json('/purchases/import-preview', {method:'POST',body:JSON.stringify({fileBase64})}),
+  importPurchases: (fileBase64,requestId) => json('/purchases/import', {method:'POST',body:JSON.stringify({fileBase64,requestId})}),
+  purchaseErrors: async fileBase64 => {
+    const r=await fetch(API+'/purchases/error-report',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({fileBase64})});
+    if(!r.ok)throw Error((await r.json()).error || 'Could not download error report.');
+    return {blob:await r.blob(),name:'SellQuanta_Purchase_Errors.xlsx'};
+  },
+  exportPurchaseHistory: filter => backupDownload('/purchases/history-export?'+new URLSearchParams(filter)),
+
   prepareBusinessReset: () => json("/business-reset/prepare", { method: "POST", body: "{}" }),
   completeBusinessReset: (token, confirmation) => json("/business-reset", { method: "POST", body: JSON.stringify({ token, confirmation }) }),
   exportWarehouseBackup: () => backupDownload("/products/export-backup"),
