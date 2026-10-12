@@ -1,3 +1,4 @@
+import { writeBrandedWorkbook, importHeaderRow } from './excelStyle.mjs';
 import { createPurchaseRouter } from './purchaseRoutes.mjs';
 import express from "express";
 import cors from "cors";
@@ -12,6 +13,7 @@ import { createCompleteReset } from "./completeReset.mjs";
 
 const app = express();
 const PORT = Number(process.env.PORT || 8787);
+
 
 app.use(cors());
 app.use(express.json({ limit: "35mb" }));
@@ -93,8 +95,8 @@ app.post("/api/business-reset", (req, res) => {
 
 // Export-only reads deliberately bypass readDb's missing-file initialization and
 // legacy normalization. These endpoints never save, migrate or back up the database.
-function sendBackupWorkbook(res, workbook, filename) {
-  const buffer = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
+async function sendBackupWorkbook(res, workbook, filename, options = {}) {
+  const buffer = await writeBrandedWorkbook(workbook, options);
   res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
   res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
   res.setHeader("Access-Control-Expose-Headers", "Content-Disposition");
@@ -102,20 +104,20 @@ function sendBackupWorkbook(res, workbook, filename) {
   res.send(buffer);
 }
 
-app.get("/api/products/export-backup", (_req, res) => {
+app.get("/api/products/export-backup", async (_req, res) => {
   try {
     const db = JSON.parse(fs.readFileSync(paths.dbFile, "utf8"));
-    sendBackupWorkbook(res, buildWarehouseBackup(db), `StockPilot_Warehouse_Backup_${backupDate()}.xlsx`);
+    await sendBackupWorkbook(res, buildWarehouseBackup(db), `StockPilot_Warehouse_Backup_${backupDate()}.xlsx`, {reportName:"Warehouse Stock Backup"});
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
 
-app.get("/api/product-master/export-backup", (req, res) => {
+app.get("/api/product-master/export-backup", async (req, res) => {
   try {
     const db = JSON.parse(fs.readFileSync(paths.dbFile, "utf8"));
     const companyId = String(req.query.companyId || "");
     const workbook = buildCompanyMasterBackup(db, companyId);
     const company = db.companies.find(c => c.id === companyId);
-    sendBackupWorkbook(res, workbook, companyBackupFilename(company.name, backupDate()));
+    await sendBackupWorkbook(res, workbook, companyBackupFilename(company.name, backupDate()), {reportName:`Product Master Backup - ${company.name}`});
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
 
@@ -433,9 +435,9 @@ function parseWarehouseSheet(fileBase64, products) {
   const sheet = wb.Sheets["WAREHOUSE"];
   if (!sheet) throw new Error('Sheet named "WAREHOUSE" was not found in the Excel file.');
 
-  const raw = XLSX.utils.sheet_to_json(sheet, { defval: "", blankrows: true });
+  const raw = XLSX.utils.sheet_to_json(sheet, { range: importHeaderRow(sheet), defval: "", blankrows: true });
   const headers = ["warehouse_product_code", "product_name", "COST PRICE", "OPENING STOCK"];
-  const found = (XLSX.utils.sheet_to_json(sheet, { header: 1 })[0] || []).map(h => String(h).trim());
+  const found = (XLSX.utils.sheet_to_json(sheet, { range: importHeaderRow(sheet), header: 1 })[0] || []).map(h => String(h).trim());
   const missing = headers.filter(h => !found.includes(h));
   if (missing.length) throw new Error(`Missing column(s): ${missing.join(", ")}`);
 
@@ -456,7 +458,7 @@ function parseWarehouseSheet(fileBase64, products) {
     if (code && seen.has(code.toLowerCase())) errors.push("duplicate code in file");
     if (code) seen.add(code.toLowerCase());
     rows.push({
-      row: i + 2, code, name,
+      row: i + 2 + importHeaderRow(sheet), code, name,
       costPrice: isNumeric(r["COST PRICE"]) ? Number(r["COST PRICE"]) : r["COST PRICE"],
       openingStock: isNumeric(r["OPENING STOCK"]) ? Number(r["OPENING STOCK"]) : r["OPENING STOCK"],
       status: errors.length ? "Error" : existing.has(code.toLowerCase()) ? "Existing" : "New",
@@ -466,12 +468,12 @@ function parseWarehouseSheet(fileBase64, products) {
   return rows;
 }
 
-app.get("/api/products/import-template", (_req, res) => {
+app.get("/api/products/import-template", async (_req, res) => {
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([["warehouse_product_code", "product_name", "COST PRICE", "OPENING STOCK"]]), "WAREHOUSE");
   res.setHeader("Content-Disposition", 'attachment; filename="StockPilot_Warehouse_Import_Template.xlsx"');
   res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-  res.send(XLSX.write(wb, { type: "buffer", bookType: "xlsx" }));
+  res.send(await writeBrandedWorkbook(wb,{template:true,reportName:"Warehouse Bulk Import Template"}));
 });
 
 app.post("/api/products/import-preview", (req, res) => {
@@ -531,11 +533,11 @@ function parseProductMasterSheet(db, companyId, marketplace, fileBase64) {
   const sheet = wb.Sheets["PRODUCT_MASTER"];
   if (!sheet) throw new Error('Sheet named "PRODUCT_MASTER" was not found in the Excel file.');
 
-  const found = (XLSX.utils.sheet_to_json(sheet, { header: 1 })[0] || []).map(h => String(h).trim());
+  const found = (XLSX.utils.sheet_to_json(sheet, { range: importHeaderRow(sheet), header: 1 })[0] || []).map(h => String(h).trim());
   const missing = MASTER_COLUMNS.filter(h => !found.includes(h));
   if (missing.length) throw new Error(`Missing column(s): ${missing.join(", ")}`);
 
-  const raw = XLSX.utils.sheet_to_json(sheet, { defval: "", blankrows: true });
+  const raw = XLSX.utils.sheet_to_json(sheet, { range: importHeaderRow(sheet), defval: "", blankrows: true });
   const byCode = new Map(db.products.map(p => [p.sku.toLowerCase(), p]));
   const existing = new Set(db.productMaster
     .filter(m => m.companyId === companyId && String(m.marketplace).toLowerCase() === marketplace.toLowerCase())
@@ -556,7 +558,7 @@ function parseProductMasterSheet(db, companyId, marketplace, fileBase64) {
     if (sku && seen.has(sku.toLowerCase())) errors.push("duplicate marketplace_sku in file");
     if (sku) seen.add(sku.toLowerCase());
     rows.push({
-      row: i + 2, code, sku, name,
+      row: i + 2 + importHeaderRow(sheet), code, sku, name,
       productId: byCode.get(code.toLowerCase())?.id || "",
       status: errors.length ? "Error" : existing.has(sku.toLowerCase()) ? "Existing" : "New",
       error: errors.join("; ")
@@ -565,7 +567,7 @@ function parseProductMasterSheet(db, companyId, marketplace, fileBase64) {
   return rows;
 }
 
-app.get("/api/product-master/template", (req, res) => {
+app.get("/api/product-master/template", async (req, res) => {
   try {
     const company = masterScope(readDb(), String(req.query.companyId || ""), String(req.query.marketplace || ""));
     const wb = XLSX.utils.book_new();
@@ -573,7 +575,7 @@ app.get("/api/product-master/template", (req, res) => {
     const fileName = `${company.name}_${req.query.marketplace}_Product_Master.xlsx`.replace(/[^\w.-]+/g, "_");
     res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-    res.send(XLSX.write(wb, { type: "buffer", bookType: "xlsx" }));
+    res.send(await writeBrandedWorkbook(wb,{template:true,reportName:`Product Master Import Template - ${company.name} / ${req.query.marketplace}`}));
   } catch (e) {
     res.status(400).json({ error: e.message });
   }
@@ -975,11 +977,11 @@ app.get("/api/ollama-info", async (_req, res) => {
 });
 
 // Report export is read-only: generate in memory without saveDb, mutate or disk exports.
-app.get("/api/reports/export", (req, res) => {
+app.get("/api/reports/export", async (req, res) => {
   try {
     const filter=Object.fromEntries(['mode','date','month','year','from','to'].map(key=>[key,typeof req.query[key]==='string'?req.query[key]:undefined]));
     const { workbook, report }=buildReportsWorkbook(readDb(),filter);
-    const bytes=XLSX.write(workbook,{bookType:'xlsx',type:'buffer'});
+    const bytes=await writeBrandedWorkbook(workbook,{reportName:'Sales & Returns Reports',totalsBySheet:Object.fromEntries(['Marketplace Summary','Agent Summary','Product Summary'].map(name=>[name,{'Total Sales':report.totals.totalSalesCents/100,Orders:report.totals.orders,'Units Sold':report.totals.unitsSold,'Returns Count':report.totals.returnsCount,'Returned Units':report.totals.returnedUnits,'Return Amount':report.totals.returnAmountCents/100,'Net Sales':report.totals.netSalesCents/100}])),period:`${report.range.from} - ${report.range.to} (UTC)`,summary:`Sales: INR ${(report.totals.totalSalesCents/100).toFixed(2)} | Orders: ${report.totals.orders} | Units: ${report.totals.unitsSold} | Returns: ${report.totals.returnsCount} | Refunds: INR ${(report.totals.returnAmountCents/100).toFixed(2)} | Net: INR ${(report.totals.netSalesCents/100).toFixed(2)}`});
     res.setHeader('Content-Type','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition',`attachment; filename="SellQuanta-Reports-${report.range.from}-${report.range.to}.xlsx"`);
     res.send(bytes);
