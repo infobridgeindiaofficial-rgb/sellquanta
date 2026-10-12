@@ -460,6 +460,7 @@ button.qty-ok { margin-top: 4px; height: 24px; padding: 0 8px; font-size: 11.5px
 /* Banking is additive; legacy page layouts stay unchanged. */
 body:has(.app-banking){min-width:320px}
 .app-banking .stats{grid-template-columns:repeat(3,minmax(0,1fr))}
+.app-banking .stats .card.stat:nth-child(n+2){border-top:0;border-left:1px solid var(--line)}
 .app-banking .form-grid{grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr))}
 .app-banking label{min-width:0}
 .app-banking .banking-marketplaces{gap:16px;background:transparent;border:0}
@@ -474,6 +475,7 @@ body:has(.app-banking){min-width:320px}
  .app-banking main{padding:0 16px 24px}
  .app-banking header{align-items:flex-start}
  .app-banking .stats{grid-template-columns:1fr}
+ .app-banking .stats .card.stat:nth-child(n+2){border-left:0;border-top:1px solid var(--line)}
  .app-banking .ph{flex-wrap:wrap;gap:12px}
 }
 
