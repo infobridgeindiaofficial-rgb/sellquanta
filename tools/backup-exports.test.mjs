@@ -8,7 +8,7 @@ import XLSX from 'xlsx';
 import { buildWarehouseBackup, buildCompanyMasterBackup, companyBackupFilename } from '../server/backupExports.mjs';
 
 const roundTrip = wb => XLSX.read(XLSX.write(wb, { bookType: 'xlsx', type: 'buffer' }), { type: 'buffer' });
-const rows = (wb, sheet) => XLSX.utils.sheet_to_json(wb.Sheets[sheet], { defval: '' });
+const rows = (wb, sheet) => XLSX.utils.sheet_to_json(wb.Sheets[sheet], { range: wb.Sheets[sheet]['!autofilter']?.ref || wb.Sheets[sheet]['!ref'], defval: '' });
 const fixture = () => ({
   companies: [{id:'c1',name:'First Company'}, {id:'c2',name:'Second Company'}],
   products: [

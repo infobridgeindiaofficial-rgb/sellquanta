@@ -25,8 +25,8 @@ test('live reports export is read-only; closing APIs removed; backups and reset 
  const response=await request('/reports/export?mode=monthly&month=2026-10');assert.equal(response.status,200);assert.match(response.headers.get('content-disposition'),/2026-10-01-2026-10-31/);
  const workbook=XLSX.read(Buffer.from(await response.arrayBuffer()),{type:'buffer'});
  assert.deepEqual(workbook.SheetNames,['Sales','Returns','Marketplace Summary','Agent Summary','Product Summary']);
- assert.equal(XLSX.utils.sheet_to_json(workbook.Sheets.Sales).length,1,'duplicate archive sale not exported twice');
- assert.equal(XLSX.utils.sheet_to_json(workbook.Sheets['Agent Summary'])[0]['Net Sales'],50);
+ assert.equal(XLSX.utils.sheet_to_json(workbook.Sheets.Sales,{range:workbook.Sheets.Sales['!autofilter'].ref}).length,1,'duplicate archive sale not exported twice');
+ assert.equal(XLSX.utils.sheet_to_json(workbook.Sheets['Agent Summary'],{range:workbook.Sheets['Agent Summary']['!autofilter'].ref})[0]['Net Sales'],50);
  assert.equal((await request('/reports/export?mode=custom&from=2026-11-01&to=2026-10-01')).status,400);
  for(const route of ['/close-day','/month-close'])assert.equal((await request(route,'POST')).status,404);
  assert.equal((await request('/backup-info')).status,200);
