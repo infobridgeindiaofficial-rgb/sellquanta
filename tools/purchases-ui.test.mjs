@@ -64,3 +64,14 @@ test('Bulk import displays validation errors and keeps importing disabled until 
  await mount(t);await click(button('Bulk Purchase Import'));const input=document.querySelector('input[type=file]');await act(async()=>{Object.defineProperty(input,'files',{value:[new dom.window.File(['workbook'],'Purchase.xlsx')],configurable:true});input.dispatchEvent(new dom.window.Event('change',{bubbles:true}));await new Promise(r=>setTimeout(r,30));});
  assert.equal(validations,1);assert.ok(button('Import Purchases').disabled);assert.ok(button('Download Error Report'));assert.ok(document.querySelector('tr.is-err').textContent.includes('Quantity must'));
 });
+
+test('App places Purchases above Warehouse and applies responsive shell only to Purchases',async t=>{
+ const {default:App}=await import(pathToFileURL(join(compiled,'App.mjs')));
+ const state={...fixture(),companies:[{id:"company",name:"Company"}],agents:[],accounts:[],productMaster:[],todaySales:[],salesHistory:[],ledger:[],refunds:[],stockMovements:[],monthCloseArchive:[]};
+ globalThis.__salesTest.api.state=async()=>state;globalThis.__salesTest.api.health=async()=>({ollama:{ok:false}});
+ const before=JSON.stringify(state),root=createRoot(document.getElementById('root'));
+ await act(async()=>root.render(React.createElement(App)));t.after(async()=>{await act(async()=>root.unmount());assert.equal(JSON.stringify(state),before);});
+ const nav=[...document.querySelectorAll('nav button')].map(b=>b.textContent);assert.equal(nav.indexOf('Purchases')+1,nav.indexOf('Warehouse'));
+ await click(button('Purchases'));assert.ok(document.querySelector('.app').classList.contains('app-purchases'));assert.ok(document.querySelector('form'));
+ await click(button('Warehouse'));assert.ok(!document.querySelector('.app').classList.contains('app-purchases'));assert.ok(document.querySelector('[aria-label="Search warehouse products"]'));assert.equal(document.querySelector('main button'),null);
+});

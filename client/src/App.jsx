@@ -131,7 +131,7 @@ export default function App() {
   };
 
   return (
-    <div className="app">
+    <div className={`app${tab === "purchases" ? " app-purchases" : ""}`}>
       <aside>
         <div className="brand">
           <div className="logo"><img src="/logo.png" alt="" width="26" height="26" /></div>
