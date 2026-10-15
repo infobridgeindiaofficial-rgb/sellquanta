@@ -1,3 +1,4 @@
+import {manualSaleDate} from '../../server/manualSaleDate.mjs';
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "./api";
 import { fileToImageDataUrls, fileToPdfPages } from "./pdf";
@@ -10,8 +11,23 @@ import { warehouseSummary } from "./warehouseSummary";
 import { refundableSales, saleLocalDay, REFUND_DAYS } from "./refunds";
 import { agentWalletTotals, ledgerTypeLabel, latestWalletReset, paymentHistory, localDateTime } from "./wallet";
 import LabelSegregator from "./LabelSegregator";
-import CompleteReset from "./CompleteReset";
+import SalesReports from "./SalesReports";
+import PurchaseLedger from './PurchaseLedger';
+import AgentDateLedger from './AgentDateLedger.jsx';
+import ProductReturnAnalysis from './ProductReturnAnalysis.jsx';
+import MasterChart from './MasterChart.jsx';
+import {dashboardReturnMonths} from './productReturnReport.js';
+import {REFUND_REASONS} from '../../server/refundClassification.mjs';
+import {refundMarketplaceMatch} from './refundMarketplaceMatch';
+import ReturnCharges from './ReturnCharges';
+import {totalPurchaseCents} from '../../server/purchaseLedger.mjs';
+import Banking from "./Banking";
 import { Icon } from "./icons";
+import { MASTER_VALUE_FIELDS } from '../../server/masterValues.mjs';
+import {dashboardProductCost} from './dashboardProductCost';
+import { financialMapping, captureFinancialSnapshot } from '../../server/financialSnapshot.mjs';
+import { salesForRange, undoEligibility, localToday } from './salesHistoryFilter';
+import {salesTableFinancials,salesTableTotals} from './salesTableFinancials';
 
 const money = n => { const v = Number(n || 0); return `${v < 0 ? "-" : ""}₹${Math.abs(v).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`; };
 
@@ -71,15 +87,19 @@ function Stat({ label, value, sub, className = "" }) {
   return <Card className={`stat ${className}`.trim()}><div className="stat-label">{label}</div><div className="stat-value">{value}</div>{sub && <div className="muted">{sub}</div>}</Card>;
 }
 
-const NAV_ICON = { dashboard:"dashboard", sales:"scan", warehouse:"box", master:"link", agents:"wallet", refunds:"refund", close:"sheet" };
+const NAV_ICON = { dashboard:"dashboard", masterChart:"dashboard", sales:"scan", warehouse:"box", master:"link", agents:"wallet", banking:"bank", purchases:"sheet", returnCharges:"refund", refunds:"refund", close:"sheet" };
 const PAGE_SUBTITLE = {
+  masterChart: "Explore business performance, build analyses and present the numbers.",
   dashboard: "Business performance across companies, marketplaces and inventory.",
   sales: "Scan shipping labels, resolve mappings and record today's sales.",
   warehouse: "Manage warehouse products, stock levels and cost.",
   master: "Map marketplace SKUs to warehouse products.",
   agents: "Track agent stock cost, payments and outstanding balances.",
+  banking: "Prepare marketplace bank receipts and statement review.",
+  purchases: "Record purchases independently and review cumulative purchase amounts.",
+  returnCharges: "Review and save explicit customer-return extra charges.",
   refunds: "Process eligible refunds and review refund history.",
-  close: "Export and close the current day's sales safely."
+  close: "Generate and export sales reports by date."
 };
 
 export default function App() {
@@ -98,8 +118,7 @@ export default function App() {
   };
 
   const businessResetCompleted = result => {
-    // Invalidate pending old-business reads and unmount every page's local state
-    // (scan rows/files, selections, cached forms and history panels included).
+    // Retain the original reset protection against stale reads and page state.
     businessGeneration.current++;
     for (const storage of ["localStorage", "sessionStorage"]) {
       for (const key of ["sp_master_company", "sp_master_marketplace", "sp_mode"]) {
@@ -128,7 +147,7 @@ export default function App() {
   };
 
   return (
-    <div className="app">
+    <div className={tab === "masterChart" ? "app master-chart-active" : "app"}>
       <aside>
         <div className="brand">
           <div className="logo"><img src="/logo.png" alt="" width="26" height="26" /></div>
@@ -138,12 +157,16 @@ export default function App() {
         <nav>
           {[
             ["dashboard","Dashboard"],
+            ["masterChart","Master Chart"],
             ["sales","Daily Sales"],
             ["warehouse","Warehouse"],
             ["master","Product Master"],
             ["agents","Agents & Wallet"],
+            ["banking","Banking"],
+            ["purchases","Purchase Ledger"],
+            ["returnCharges","Return Charges"],
             ["refunds","Refunds"],
-            ["close","Excel / Close Day"]
+            ["close","Reports / Excel"]
           ].map(([id,label]) => (
             <button key={id} onClick={() => setTab(id)} className={tab === id ? "active" : ""} aria-current={tab === id ? "page" : undefined}><Icon name={NAV_ICON[id]} size={16} strokeWidth={1.75}/>{label}</button>
           ))}
@@ -160,12 +183,16 @@ export default function App() {
           <div>
             <h1>{{
               dashboard:"Dashboard",
+              masterChart:"Master Chart",
               sales:"Daily Sales",
               warehouse:"Warehouse",
               master:"Product Master",
               agents:"Agents & Wallet",
+              banking:"Banking",
+              purchases:"Purchase Ledger",
+              returnCharges:"Return Charges",
               refunds:"Refunds",
-              close:"Excel / Close Day"
+              close:"Reports / Excel"
             }[tab]}</h1>
             <p>{PAGE_SUBTITLE[tab]}</p>
           </div>
@@ -173,71 +200,176 @@ export default function App() {
 
         {msg && <div className={`toast ${toastKind(msg)}`} role="status"><Icon name={{ok:"check",err:"error",info:"info"}[toastKind(msg)]} size={16}/><span>{msg}</span></div>}
 
-        {state.companies.length === 0 && tab !== "agents" && <Card>
+        {state.companies.length === 0 && tab !== "agents" && tab !== "masterChart" && <Card>
           <h3>Add your first company</h3>
           <p className="muted">Create a company to set up agents, marketplace accounts and Product Master mappings.</p>
           <button onClick={() => setTab("agents")}>Add Company</button>
         </Card>}
 
         {tab === "dashboard" && <Dashboard state={state} />}
+        {tab === "masterChart" && <MasterChart state={state} reload={reload} onExitWorkspace={()=>setTab('dashboard')} />}
         {tab === "sales" && <Sales state={state} reload={reload} notify={notify} setHealth={setHealth} />}
         {tab === "warehouse" && <Warehouse state={state} reload={reload} notify={notify} />}
         {tab === "master" && <ProductMaster state={state} reload={reload} notify={notify} />}
         {tab === "agents" && <Agents state={state} reload={reload} notify={notify} />}
+        {tab === "banking" && <Banking />}
+        {tab === "purchases" && <PurchaseLedger state={state} reload={reload} />}
+        {tab === "returnCharges" && <ReturnCharges onSaved={reload} />}
         {tab === "refunds" && <Refunds state={state} reload={reload} notify={notify} />}
-        {tab === "close" && <CloseDay state={state} reload={reload} notify={notify} busy={busy} setBusy={setBusy} onBusinessReset={businessResetCompleted} />}
+        {tab === "close" && <SalesReports state={state} onBusinessReset={businessResetCompleted} />}
       </main>
     </div>
   );
 }
 
 function Dashboard({ state }) {
+  const [filterMode, setFilterMode] = useState("month");
   const [month, setMonth] = useState(() => monthOptions(state)[0]);
-  const months = monthOptions(state);
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+  const [lastValidFrom, setLastValidFrom] = useState("");
+  const [lastValidTo, setLastValidTo] = useState("");
+  
+  const months = dashboardReturnMonths(state);
   const shown = months.includes(month) ? month : months[0];
-  const d = dashboardStats(state, shown);
-  const empty = <EmptyRow colSpan="6">No sales in this month.</EmptyRow>;
+
+  // Initialize date range to current month bounds when switching to dateRange
+  const initDateRange = (m) => {
+    const [y, mo] = m.split("-").map(Number);
+    const start = `${y}-${String(mo).padStart(2, "0")}-01`;
+    const end = new Date(y, mo, 0);
+    const endStr = `${y}-${String(mo).padStart(2, "0")}-${String(end.getDate()).padStart(2, "0")}`;
+    setFromDate(start);
+    setToDate(endStr);
+    setLastValidFrom(start);
+    setLastValidTo(endStr);
+  };
+
+  // Handle filter mode change
+  const handleFilterChange = (mode) => {
+    setFilterMode(mode);
+    if (mode === "dateRange") {
+      initDateRange(shown);
+    }
+  };
+
+  // Validate and apply date range
+  const isDateRangeValid = fromDate && toDate && fromDate <= toDate;
+  const options = filterMode === "month" 
+    ? { month: shown } 
+    : isDateRangeValid 
+      ? { fromDate, toDate } 
+      : { fromDate: lastValidFrom, toDate: lastValidTo };
+
+  // Keep the Purchase Ledger's ID deduplication and saved totals; scope only this KPI.
+  const periodPurchases = [...new Map((state.purchases || []).map(p => [p.id || p, p])).values()].filter(p => {
+    const date = String(p.date || '').slice(0,10);
+    return options.month ? date.slice(0,7) === options.month
+      : !!date && (!options.fromDate || date >= options.fromDate) && (!options.toDate || date <= options.toDate);
+  });
+  const d = dashboardStats(state, options);
+  const productCost=dashboardProductCost(state,options);
+  const overall=dashboardStats(state,{allTime:true});
+  const overallProductCost=dashboardProductCost(state,{allTime:true});
+  const empty = <EmptyRow colSpan="6">No sales in this period.</EmptyRow>;
+  
+  const periodLabel = filterMode === "month" 
+    ? monthLabel(shown) 
+    : (lastValidFrom && lastValidTo ? `${lastValidFrom} → ${lastValidTo}` : monthLabel(shown));
+  
+  const estimateNote = value => [value.missingQuantity ? `${value.missingQuantity} units: missing mapping/value` : '', value.capturedQuantity ? `${value.capturedQuantity} units: captured at sale time` : '', value.inferredQuantity ? `${value.inferredQuantity} units: inferred from current mappings` : '', value.returnChargeAmount ? `Less confirmed return extra charges ${money(value.returnChargeAmount)}` : ''].filter(Boolean).join(' · ') || 'No eligible sales in this period';
+  const Estimate = ({value}) => <span title={estimateNote(value)}>{value.amount === null ? 'Not available' : <Money n={value.amount}/>}</span>;
+  const periodWord = filterMode === "month" ? "month" : "period";
 
   return <>
     <div className="dash-top">
-      <Card className="flush">
-        <div className="ph"><h3>This month</h3><span className="meta">All monthly figures below are for {monthLabel(shown)}.</span>
+      <div className="dashboard-summary-stack">
+      <Card className="flush dashboard-overall" >
+        <div className="ph"><h3>Overall Business Summary</h3><span className="meta">All-time business performance</span></div>
+        <div className="figs">
+          <div className="fig-cell"><span className="fig-l">Total Invoice Amount</span><span className="fig-v xl"><Money n={overall.totals.sales}/></span><span className="fig-s">Net · Gross {money(overall.totals.grossSales)} − Refunds {money(overall.totals.refundAmount)}</span></div>
+          <div className="fig-cell"><span className="fig-l">Total Orders</span><span className="fig-v">{overall.totals.orders}</span></div>
+          <div className="fig-cell"><span className="fig-l">Net Quantity</span><span className="fig-v">{overall.totals.qty}</span><span className="fig-s">{`Sold ${overall.totals.grossQty} - Refunded ${overall.totals.refundQty}`}</span></div>
+          <div className="fig-cell"><span className="fig-l">Total Product Cost</span><span className={`fig-v ${overallProductCost===null?'na':''}`}>{overallProductCost===null?'Not available':<Money n={overallProductCost}/>}</span><span className="fig-s">All-time net product cost</span></div>
+          <div className="fig-cell"><span className="fig-l">Total Estimated Settlement</span><span className={`fig-v ${overall.estimates.estimated_settlement.amount===null?'na':''}`}><Estimate value={overall.estimates.estimated_settlement}/></span><span className="fig-s">{estimateNote(overall.estimates.estimated_settlement)}</span></div>
+          <div className="fig-cell"><span className="fig-l">Total Estimated Profit</span><span className={`fig-v ${overall.estimates.estimated_profit.amount===null?'na':''}`}><Estimate value={overall.estimates.estimated_profit}/></span><span className="fig-s">{estimateNote(overall.estimates.estimated_profit)}</span></div>
+          <div className="fig-cell"><span className="fig-l">Total Refund Amount</span><span className="fig-v"><Money n={overall.totals.refundAmount}/></span></div>
+          <div className="fig-cell"><span className="fig-l">Total Purchase</span><span className="fig-v"><Money n={totalPurchaseCents(state.purchases)/100}/></span><span className="fig-s">All-time purchase amount</span></div>
+        </div>
+      </Card>
+      <Card className="flush dashboard-overview">
+        <div className="ph dashboard-period-header">
+          <h3>{filterMode === "month" ? "This month" : "Selected period"}</h3>
+          <span className="meta">All figures below are for {periodLabel}.</span>
           <div className="acts">
-            <label className="check-label" htmlFor="dash-month">Month</label>
-            <select id="dash-month" className="compact" value={shown} onChange={e=>setMonth(e.target.value)}>
-              {months.map(m => <option key={m} value={m}>{monthLabel(m)}</option>)}
-            </select>
+            <div className="filter-toggle" role="group" aria-label="Filter by">
+              <button 
+                type="button"
+                className={filterMode === "month" ? "active" : ""}
+                onClick={() => handleFilterChange("month")}
+                aria-pressed={filterMode === "month"}
+              >
+                Month
+              </button>
+              <button 
+                type="button"
+                className={filterMode === "dateRange" ? "active" : ""}
+                onClick={() => handleFilterChange("dateRange")}
+                aria-pressed={filterMode === "dateRange"}
+              >
+                Date Range
+              </button>
+            </div>
+            <div className="dashboard-filter-fields">
+            {filterMode === "month" && (
+              <>
+                <label className="check-label" htmlFor="dash-month">Month</label>
+                <select id="dash-month" className="compact" value={shown} onChange={e=>setMonth(e.target.value)}>
+                  {months.map(m => <option key={m} value={m}>{monthLabel(m)}</option>)}
+                </select>
+              </>
+            )}
+            {filterMode === "dateRange" && (
+              <>
+                <label className="check-label" htmlFor="dash-from">From</label>
+                <input 
+                  id="dash-from" 
+                  type="date" 
+                  className="compact-date" 
+                  value={fromDate} 
+                  onChange={e => setFromDate(e.target.value)} 
+                />
+                <label className="check-label" htmlFor="dash-to">To</label>
+                <input 
+                  id="dash-to" 
+                  type="date" 
+                  className="compact-date" 
+                  value={toDate} 
+                  onChange={e => setToDate(e.target.value)} 
+                />
+                {!isDateRangeValid && fromDate && toDate && (
+                  <span className="badge err" style={{fontSize: 11, height: 21}}>From date must be ≤ To date</span>
+                )}
+              </>
+            )}
+            </div>
           </div>
         </div>
         <div className="figs">
-          <div className="fig-cell"><span className="fig-l">Monthly Sales</span><span className="fig-v xl"><Money n={d.totals.sales}/></span><span className="fig-s">Net · Gross {money(d.totals.grossSales)} − Refunds {money(d.totals.refundAmount)}</span></div>
-          <div className="fig-cell"><span className="fig-l">Monthly Orders</span><span className="fig-v">{d.totals.orders}</span>{d.totals.refundCount ? <span className="fig-s">{`${d.totals.refundCount} refund${d.totals.refundCount === 1 ? "" : "s"} this month`}</span> : null}</div>
-          <div className="fig-cell"><span className="fig-l">Monthly Quantity</span><span className="fig-v">{d.totals.qty}</span><span className="fig-s">{`Sold ${d.totals.grossQty} − Refunded ${d.totals.refundQty}`}</span></div>
-          <div className="fig-cell"><span className="fig-l">Monthly Profit</span><span className="fig-v na">Not available</span><span className="fig-s">{d.profit.salesMinusStockCost === null ? "needs marketplace fees & tax" : `Sales − stock cost ${money(d.profit.salesMinusStockCost)} (before fees & tax)`}</span></div>
+          <div className="fig-cell"><span className="fig-l">Total Invoice Amount</span><span className="fig-v xl"><Money n={d.totals.sales}/></span><span className="fig-s">Net · Gross {money(d.totals.grossSales)} − Refunds {money(d.totals.refundAmount)}</span></div>
+          <div className="fig-cell"><span className="fig-l">{filterMode === "month" ? "Monthly Orders" : `${periodWord[0].toUpperCase() + periodWord.slice(1)} Orders`}</span><span className="fig-v">{d.totals.orders}</span>{d.totals.refundCount ? <span className="fig-s">{`${d.totals.refundCount} refund${d.totals.refundCount === 1 ? "" : "s"} this ${periodWord}`}</span> : null}</div>
+          <div className="fig-cell"><span className="fig-l">{filterMode === "month" ? "Monthly Quantity" : `${periodWord[0].toUpperCase() + periodWord.slice(1)} Quantity`}</span><span className="fig-v">{d.totals.qty}</span><span className="fig-s">{`Sold ${d.totals.grossQty} − Refunded ${d.totals.refundQty}`}</span></div>
+          <div className="fig-cell"><span className="fig-l">Total Product Cost</span><span className={`fig-v ${productCost===null?'na':''}`}>{productCost===null?'Not available':<Money n={productCost}/>}</span><span className="fig-s">Cost of sales in this {periodWord}</span></div>
+          <div className="fig-cell"><span className="fig-l">Total Estimated Settlement</span><span className={`fig-v ${d.estimates.estimated_settlement.amount===null?'na':''}`}><Estimate value={d.estimates.estimated_settlement}/></span><span className="fig-s">{estimateNote(d.estimates.estimated_settlement)}</span></div>
+          <div className="fig-cell"><span className="fig-l">Total Estimated Profit</span><span className={`fig-v ${d.estimates.estimated_profit.amount===null?'na':''}`}><Estimate value={d.estimates.estimated_profit}/></span><span className="fig-s">{estimateNote(d.estimates.estimated_profit)}</span></div>
+          <div className="fig-cell"><span className="fig-l">Total Refund Amount</span><span className="fig-v"><Money n={d.totals.refundAmount}/></span></div>
+          <div className="fig-cell"><span className="fig-l">Total Purchase</span><span className="fig-v"><Money n={totalPurchaseCents(periodPurchases)/100}/></span><span className="fig-s">Purchase amount in this {periodWord}</span></div>
         </div>
       </Card>
 
-      <Card className="flush">
-        <div className="ph"><h3>Today Summary</h3></div>
-        <div className="today-rows">
-          <div className="r"><span>Today Orders</span><b>{d.today.orders}</b></div>
-          <div className="r"><span>Today Quantity</span><b>{d.today.qty}</b></div>
-          <div className="r"><span>Today Sales</span><b><Money n={d.today.sales}/></b></div>
-        </div>
-      </Card>
-    </div>
+      </div>
 
-    <div className="dgrid">
-      <Card className="flush">
-        <div className="ph"><h3>Company Performance</h3><span className="meta">by marketplace · selected month</span></div>
-        <div className="table-wrap"><table><thead><tr><th>Company / Marketplace</th><th className="n">Orders</th><th className="n">Qty</th><th className="n">Net Sales</th><th className="n">Refunds</th></tr></thead>
-        <tbody>{d.companies.length ? d.companies.map(c => <React.Fragment key={c.id}>
-          <tr className="group"><td>{c.name}</td><td className="n">{c.orders}</td><td className="n">{c.qty}</td><td className="n"><Money n={c.sales}/></td><td className="n"><Money n={c.refundAmount}/></td></tr>
-          {c.marketplaces.map(m => <tr className="child" key={m.marketplace}><td><Mkt name={m.marketplace}/></td><td className="n">{m.orders}</td><td className="n">{m.qty}</td><td className="n"><Money n={m.sales}/></td><td></td></tr>)}
-        </React.Fragment>) : <EmptyRow colSpan="5">No companies yet.</EmptyRow>}</tbody></table></div>
-      </Card>
-
-      <Card className="flush">
+      <Card className="flush dashboard-low-stock">
         <div className="ph"><h3>Low Stock</h3>
           <span className={`badge ${d.lowStock.length ? "warn" : ""}`} title="right now, at / below alert level">{d.lowStock.length ? <Icon name="alert" size={11} strokeWidth={2.4}/> : null}{d.lowStock.length} at / below alert level</span>
         </div>
@@ -250,18 +382,29 @@ function Dashboard({ state }) {
       </Card>
     </div>
 
+    <div className="dgrid company-performance">
+      <Card className="flush">
+        <div className="ph"><h3>Company Performance</h3><span className="meta">by marketplace · {periodLabel}</span></div>
+        <div className="table-wrap"><table><thead><tr><th>Company / Marketplace</th><th className="n">Orders</th><th className="n">Qty</th><th className="n">Invoice Amount</th><th className="n">Refunds</th><th className="n">Estimated Settlement</th><th className="n">Estimated Profit</th></tr></thead>
+        <tbody>{d.companies.length ? d.companies.map(c => <React.Fragment key={c.id}>
+          <tr className="group"><td>{c.name}</td><td className="n">{c.orders}</td><td className="n">{c.qty}</td><td className="n"><Money n={c.sales}/></td><td className="n"><Money n={c.refundAmount}/></td><td className="n"><Estimate value={c.estimates.estimated_settlement}/></td><td className="n"><Estimate value={c.estimates.estimated_profit}/></td></tr>
+          {c.marketplaces.map(m => <tr className="child" key={m.marketplace}><td><Mkt name={m.marketplace}/></td><td className="n">{m.orders}</td><td className="n">{m.qty}</td><td className="n"><Money n={m.sales}/></td><td className="n"><Money n={m.refundAmount}/></td><td className="n"><Estimate value={m.estimates.estimated_settlement}/></td><td className="n"><Estimate value={m.estimates.estimated_profit}/></td></tr>)}
+        </React.Fragment>) : <EmptyRow colSpan="7">No companies yet.</EmptyRow>}</tbody></table></div>
+      </Card>
+    </div>
+
     <div className="dgrid pair">
       <Card className="flush">
-        <div className="ph"><h3>Top Selling Products</h3><span className="meta">Selected month</span></div>
-        <div className="table-wrap"><table><thead><tr><th>Product</th><th>Warehouse Product Code</th><th>Company</th><th>Marketplace</th><th className="n">Qty Sold</th><th className="n">Sales</th></tr></thead>
+        <div className="ph"><h3>Top Selling Products</h3><span className="meta">{periodLabel}</span></div>
+        <div className="table-wrap"><table><thead><tr><th>Product</th><th>Warehouse Product Code</th><th>Company</th><th>Marketplace</th><th className="n">Qty Sold</th><th className="n">Invoice Amount</th></tr></thead>
         <tbody>{d.topProducts.length ? d.topProducts.slice(0,10).map((p,i) => <tr key={i}>
           <td className="strong">{p.productName}</td><td><span className="code">{p.code}</span></td><td className="sub">{p.company}</td><td><Mkt name={p.marketplace}/></td><td className="n strong">{p.qty}</td><td className="n"><Money n={p.sales}/></td>
         </tr>) : empty}</tbody></table></div>
       </Card>
 
       <Card className="flush">
-        <div className="ph"><h3>Top Performing Accounts</h3><span className="meta">Selected month</span></div>
-        <div className="table-wrap"><table><thead><tr><th>Company</th><th>Marketplace</th><th className="n">Orders</th><th className="n">Quantity</th><th className="n">Sales</th></tr></thead>
+        <div className="ph"><h3>Top Performing Accounts</h3><span className="meta">{periodLabel}</span></div>
+        <div className="table-wrap"><table><thead><tr><th>Company</th><th>Marketplace</th><th className="n">Orders</th><th className="n">Quantity</th><th className="n">Invoice Amount</th></tr></thead>
         <tbody>{d.accounts.map(a => <tr key={a.company + a.marketplace}>
           <td>{a.company}</td><td><Mkt name={a.marketplace}/></td><td className="n">{a.orders}</td><td className="n">{a.qty}</td><td className="n strong"><Money n={a.sales}/></td>
         </tr>)}</tbody></table></div>
@@ -269,17 +412,28 @@ function Dashboard({ state }) {
     </div>
 
     <Card className="flush">
-      <div className="ph"><h3>Agent Activity</h3><span className="meta">Selected month</span></div>
+      <div className="ph"><h3>Agent Activity</h3><span className="meta">{periodLabel}</span></div>
       <div className="table-wrap"><table><thead><tr><th>Agent</th><th>Company</th><th className="n">Orders</th><th className="n">Qty Sold</th><th className="n">Sales Due</th></tr></thead>
       <tbody>{d.agents.length ? d.agents.map(a => <tr key={a.id}>
         <td className="strong">{a.name}</td><td className="sub">{a.company}</td><td className="n">{a.orders}</td><td className="n">{a.qty}</td><td className="n"><Money n={a.salesDue}/></td>
       </tr>) : <EmptyRow colSpan="5">Add your first agent.</EmptyRow>}</tbody></table></div>
-      <p className="note">Sales Due here is the stock cost of this month's sales only. Payments and the running wallet balance are on Agents &amp; Wallet.</p>
+      <p className="note">Sales Due here is the stock cost of this ${periodWord}'s sales only. Payments and the running wallet balance are on Agents & Wallet.</p>
     </Card>
+    <ProductReturnAnalysis state={state} options={options}/>
   </>;
 }
 
 function Sales({ state, reload, notify, setHealth }) {
+  const [manualDate,setManualDate]=useState(localToday);
+  const [historyDate, setHistoryDate] = useState(localToday);
+  const [historyToDate,setHistoryToDate]=useState(localToday);
+  const [undoing, setUndoing] = useState(false);
+  const undoPending = useRef(false);
+  const historyRows = salesForRange(state, historyDate,historyToDate);
+  const historyTotals=salesTableTotals(historyRows,state);
+  const historyRangeValid=historyDate&&historyToDate&&historyDate<=historyToDate;
+  const undoStatus = historyDate===historyToDate ? undoEligibility(state, historyDate) : {enabled:false,reason:'Select a single date to undo the latest batch.'};
+  const historyMoney=value=>value===null?'Not available':<Money n={value}/>;
   const activeCompanyIds = new Set(state.companies.filter(c => c.active !== false).map(c => c.id));
   const salesAgents = state.agents.filter(a => a.active !== false && activeCompanyIds.has(a.companyId));
   const [agentId, setAgentId] = useState(salesAgents[0]?.id || "");
@@ -323,11 +477,12 @@ function Sales({ state, reload, notify, setHealth }) {
 
   const manualSave = async () => {
     if (saving) return;
+    try { manualSaleDate(manualDate); } catch(e) { notify(e.message); return; }
     setSaving(true);
     try {
-      await api.addSales([{ agentId, accountId, productId, qty:Number(qty), saleAmount:Number(amount || 0), orderId, source:"manual" }]);
+      await api.addSales([{ agentId, accountId, productId, qty:Number(qty), saleAmount:Number(amount || 0), orderId, source:"manual", saleDate:manualDate }]);
       await reload();
-      setOrderId(""); setAmount(""); setQty(1);
+      setOrderId(""); setAmount(""); setQty(1); setManualDate(localToday());
       notify("Sale added and stock deducted.");
     } catch(e) { notify(e.message); }
     finally { setSaving(false); }
@@ -364,12 +519,19 @@ function Sales({ state, reload, notify, setHealth }) {
   const matched = view.filter(v => v.eligible);
 
   const undoLastBatch = async () => {
-    if (!window.confirm("Undo the last saved sales batch and restore stock?")) return;
+    if (undoPending.current || !undoStatus.enabled) return;
+    if (!window.confirm(`Undo the last saved sales batch on ${historyDate} and restore stock?`)) return;
+    undoPending.current = true; setUndoing(true);
     try {
-      const r = await api.undoLastBatch();
+      const fresh = undoEligibility(await api.state(), historyDate);
+      if (!fresh.enabled || fresh.batchId !== undoStatus.batchId) {
+        await reload(); notify(fresh.enabled ? 'The latest batch changed. Review the refreshed sales before undoing.' : fresh.reason); return;
+      }
+      const r = await api.undoLastBatch(undoStatus.batchId, historyDate);
       await reload();
       notify(`Undid ${r.undone} sale(s); warehouse stock and agent due restored.`);
     } catch(e) { notify(e.message); }
+    finally { undoPending.current = false; setUndoing(false); }
   };
 
   // Neither of these touches scanRows: it is the working queue for the whole session (see runScan/saveScans below),
@@ -475,6 +637,10 @@ function Sales({ state, reload, notify, setHealth }) {
     agentId: agent.id, accountId: account.id, productId:product.id, marketplaceSku: sku, qty:r.qty, saleAmount:r.saleAmount,
     orderId:r.orderId || "", trackingId:r.trackingId || "", source:"ollama-label"
   });
+  const markConfirmedScans = (targets, created) => {
+    targets.forEach((v,index) => markRows(new Set([v.r._id]), { _saved: true, _saveError: undefined,
+      ...(Array.isArray(created) && created[index]?.financialSnapshot ? { _financialSnapshot: created[index].financialSnapshot } : {}) }));
+  };
   // Marks rows by their STABLE _id (never by array position/index - a save can finish out of order and the table can
   // grow in between), so each row's own confirmed result is what changes it, nothing else.
   const markRows = (ids, patch) => setScanRows(x => x.map(z => ids.has(z._id) ? { ...z, ...patch } : z));
@@ -493,16 +659,16 @@ function Sales({ state, reload, notify, setHealth }) {
     const targets = matched;
     try {
       try {
-        await api.addSales(targets.map(saleRowFor));
-        markRows(new Set(targets.map(v => v.r._id)), { _saved: true, _saveError: undefined });
+        const created = await api.addSales(targets.map(saleRowFor));
+        markConfirmedScans(targets, created);
         await reload();
         notify(`${targets.length} sale(s) saved and warehouse stock deducted.`);
       } catch (bulkErr) {
         let ok = 0;
         for (const v of targets) {
           try {
-            await api.addSales([saleRowFor(v)]);
-            markRows(new Set([v.r._id]), { _saved: true, _saveError: undefined });
+            const created = await api.addSales([saleRowFor(v)]);
+            markConfirmedScans([v], created);
             ok++;
           } catch (rowErr) {
             markRows(new Set([v.r._id]), { _saveError: rowErr.message });
@@ -542,7 +708,7 @@ function Sales({ state, reload, notify, setHealth }) {
     </Card>
 
     {(scanRows.length > 0 || scanErrors.length > 0) && <Card className="flush">
-      <div className="ph"><h3 className="eyebrow"><span className="stepn">2</span>Scanned Rows</h3><span className="meta">Order ID, Qty and Amount can be edited before saving</span></div>
+      <div className="ph"><h3 className="eyebrow"><span className="stepn">2</span>Scanned Rows</h3><span className="meta">Order ID, Qty and Amount can be edited before saving</span><div className="acts"><button className="ghost sm" disabled={saving || scanning} onClick={()=>void reload().catch(e=>notify(e.message))}>Refresh mappings</button></div></div>
       {scanRows.length > 0 && <div className="summary-strip" aria-label="Scanned row status counts">
         <div className="ss"><span className="sv">{view.length}</span><span className="sl">Rows</span></div>
         {[["Matched","var(--ok)"],["Needs Review","var(--warn)"],["Not Found","var(--err)"],["Duplicate","var(--dup)"],["Error","var(--err)"],["Saved","var(--ink-4)"]].filter(([k]) => statusCounts[k]).map(([k,c]) =>
@@ -552,6 +718,9 @@ function Sales({ state, reload, notify, setHealth }) {
       {scanRows.length > 0 && <div className="table-wrap scroll"><table id="scan-rows"><thead><tr><th>Order ID</th><th>Company</th><th>Agent</th><th>Marketplace</th><th>Marketplace SKU</th><th>Product Name</th><th className="n">Qty</th><th className="n">Amount</th><th>Warehouse Product</th><th>Status</th></tr></thead>
       <tbody>{view.map(({r, company, agent, marketplace, product, sku, masterName, status, reason})=>{
         const saved = !!r._saved;
+        const mapping = product && company ? financialMapping(state.productMaster, { companyId: company.id, marketplace, marketplaceSku: sku, productId: product.id }) : null;
+        const financial = saved ? r._financialSnapshot : captureFinancialSnapshot(mapping, Number(r.qty), null);
+        const financialAmount = value => typeof value === 'number' && Number.isFinite(value) ? new Intl.NumberFormat('en-IN',{style:'currency',currency:'INR',minimumFractionDigits:2,maximumFractionDigits:2}).format(value) : 'Not available';
         // Edits are matched by the row's own stable _id, never by its position in this list.
         const editRow = patch => setScanRows(x => x.map(z => z._id === r._id ? { ...z, ...patch } : z));
         const rowClass = saved ? "is-saved" : (status === "Error" || status === "Not Found") ? "is-err" : status === "Needs Review" ? "is-warn" : "";
@@ -564,7 +733,13 @@ function Sales({ state, reload, notify, setHealth }) {
         <td className="wrap">{masterName || r.productName || "—"}</td>
         <td className="n"><input className="small cin r" aria-label="Qty" style={{width:52}} type="number" min="1" value={r.qty} disabled={saved} onChange={e=>{ const v=Number(e.target.value); editRow({qty:v, _qtyUncertain:!!r._qtyUncertain && !(Number.isInteger(v) && v>0)}); }}/></td>
         <td className="n"><input className="small cin r" aria-label="Amount" style={{width:76}} type="number" value={r.saleAmount} disabled={saved} onChange={e=>{ const v=Number(e.target.value); editRow({saleAmount:v, _amountUncertain:!!r._amountUncertain && !(v>0)}); }}/></td>
-        <td className="wrap">{product ? <><span className="code">{product.sku}</span><small>{product.name}</small></> : "—"}</td>
+        <td className="wrap">{product ? <><span className="code">{product.sku}</span><small>{product.name}</small></> : "—"}
+          <details className="scan-financial-details"><summary>Financial details</summary>
+            <div className="muted">{saved?'Captured at sale time':'Preview from current Product Master; captured on save'}</div>
+            <div>Invoice Amount: <b>{financialAmount(r.saleAmount === '' || r.saleAmount === null || r.saleAmount === undefined || r._amountUncertain ? null : Number(r.saleAmount))}</b></div>
+            {MASTER_VALUE_FIELDS.map(([field,label])=><div key={field}>{label}: <b>{financialAmount(financial?.perUnit?.[field])}</b> per unit; total <b>{financialAmount(financial?.totals?.[field])}</b></div>)}
+          </details>
+        </td>
         <td className="wrap" title={`Read by: ${r._scanMethod || "-"}${r._diag?.ollama?.called ? ` · Ollama ${r._diag.ollama.ok ? `OK${r._diag.ollama.ms ? ` (${Math.round(r._diag.ollama.ms/1000)}s)` : ""}` : `failed: ${r._diag.ollama.error || ""}`}` : " · Ollama not needed"}`}><StatusBadge status={status}/>{reason && <span className="reason">{reason}</span>}
           {!saved && (r._qtyUncertain || r._amountUncertain) && Number(r.qty) > 0 && (!r._amountUncertain || Number(r.saleAmount) > 0) && <button className="quiet sm qty-ok" onClick={()=>editRow({_qtyUncertain:false, _amountUncertain:false})}><Icon name="check" size={13}/>{r._qtyUncertain && r._amountUncertain ? `Qty ${r.qty} & ₹${r.saleAmount} are correct` : r._qtyUncertain ? `Qty ${r.qty} is correct` : `Amount ₹${r.saleAmount} is correct`}</button>}</td>
       </tr>; })}</tbody></table></div>}
@@ -578,11 +753,12 @@ function Sales({ state, reload, notify, setHealth }) {
       <div className="ph"><h3 className="eyebrow dim"><span className="stepn">+</span>Manual Sale</h3><span className="meta">For a sale without a label</span></div>
       <div className="pb">
         <div className="form-grid manual">
+          <label>Sale Date<input type="date" aria-label="Sale Date" required min="0001-01-01" max={localToday()} value={manualDate} onChange={e=>setManualDate(e.target.value)}/></label>
           <label>Agent<select value={agentId} onChange={e=>setAgentId(e.target.value)}>
             <option value="">Select agent</option>{salesAgents.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}
           </select></label>
           <label>Account<select value={accountId} onChange={e=>setAccountId(e.target.value)}>
-            <option value="">Select account</option>{accounts.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}
+            <option value="">Select account</option>{accounts.map(a=><option key={a.id} value={a.id}>{a.marketplace}</option>)}
           </select></label>
           <label>Product<select value={productId} onChange={e=>setProductId(e.target.value)}>
             <option value="">Select product</option>{activeProducts.map(p=><option key={p.id} value={p.id}>{p.sku} — {p.name} ({p.stock})</option>)}
@@ -596,16 +772,21 @@ function Sales({ state, reload, notify, setHealth }) {
     </Card>
 
     <Card className="flush">
-      <div className="ph"><h3 className="eyebrow"><span className="stepn">3</span>Today's Sales</h3><span className="meta">{state.todaySales.length} sale{state.todaySales.length === 1 ? "" : "s"} · newest first</span>
-        <div className="acts"><button className="ghost sm" onClick={undoLastBatch}><Icon name="refund" size={14}/>Undo Last Batch</button></div>
+      <div className="ph"><h3 className="eyebrow"><span className="stepn">3</span>Today's Sales</h3><span className="meta">{historyRows.length} sale{historyRows.length === 1 ? "" : "s"} · newest first</span>
+        <div className="acts"><label className="check-label" htmlFor="sales-history-date">From Date</label><input id="sales-history-date" type="date" className="compact-date" value={historyDate} disabled={undoing} onChange={e=>{const next=e.target.value;if(historyToDate===historyDate)setHistoryToDate(next);setHistoryDate(next);}}/><label className="check-label" htmlFor="sales-history-to-date">To Date</label><input id="sales-history-to-date" type="date" className="compact-date" value={historyToDate} disabled={undoing} onChange={e=>setHistoryToDate(e.target.value)}/><button className="ghost sm" disabled={undoing} onClick={()=>{const today=localToday();setHistoryDate(today);setHistoryToDate(today);}}>Today</button><button className="ghost sm" disabled={undoing || saving || !undoStatus.enabled} title={undoStatus.reason} aria-describedby="sales-undo-reason" onClick={undoLastBatch}><Icon name="refund" size={14}/>Undo Last Batch</button></div>
       </div>
-      <div className="table-wrap"><table><thead><tr><th>Agent</th><th>Account</th><th>Order</th><th>Product</th><th className="n">Qty</th><th className="n">Amount</th><th>Source</th></tr></thead>
-      <tbody>{state.todaySales.length ? [...state.todaySales].reverse().map(s=><tr key={s.id}>
+      {!undoStatus.enabled && <p id="sales-undo-reason" className="muted" style={{margin:'8px 16px'}}>{undoStatus.reason}</p>}
+      {!historyRangeValid&&<p className="form-error" role="alert">Select valid From Date and To Date values, with From Date before or equal to To Date.</p>}
+      <div className="table-wrap scroll"><table className="today-sales-table"><thead><tr className="group sales-total"><td colSpan="4" className="strong">TOTAL</td><td className="n">{historyTotals.qty??'Not available'}</td><td className="n">{historyMoney(historyTotals.amount)}</td><td className="n">{historyMoney(historyTotals.cost)}</td><td className="n">{historyMoney(historyTotals.settlement)}</td><td className="n">{historyMoney(historyTotals.profit)}</td><td></td></tr>
+      <tr><th>Agent</th><th>Account</th><th>Order</th><th>Product</th><th className="n">Qty</th><th className="n">Amount</th><th className="n">Cost</th><th className="n">Estimated Settlement</th><th className="n">Estimated Profit</th><th>Source</th></tr></thead>
+      <tbody>{historyRows.length ? historyRows.map(s=>{const financial=salesTableFinancials(s,state);return <tr key={s.id}>
         <td className="strong">{state.agents.find(a=>a.id===s.agentId)?.name}</td>
-        <td className="sub">{state.accounts.find(a=>a.id===s.accountId)?.name}</td>
+        <td className="sub">{s.marketplace || state.accounts.find(a=>a.id===s.accountId)?.marketplace}</td>
         <td>{s.orderId ? <span className="code">{s.orderId}</span> : "—"}</td><td>{s.productName}</td><td className="n">{s.qty}</td><td className="n"><Money n={s.saleAmount}/></td>
+        <td className="n">{historyMoney(financial.cost)}</td><td className="n">{historyMoney(financial.settlement)}</td><td className="n">{historyMoney(financial.profit)}</td>
         <td title={s.source}>{SOURCE_LABEL[s.source] ? <span className="src"><Icon name={SOURCE_LABEL[s.source][0]} size={13}/>{SOURCE_LABEL[s.source][1]}</span> : s.source}</td>
-      </tr>):<EmptyRow colSpan="7">No sales entered today.</EmptyRow>}</tbody></table></div>
+      </tr>;}):<EmptyRow colSpan="10">{historyDate===historyToDate?'No sales recorded for this date':'No sales recorded for this date range'}</EmptyRow>}</tbody>
+      </table></div>
     </Card>
   </>;
 }
@@ -931,10 +1112,12 @@ function ProductMaster({ state, reload, notify }) {
   const [editId,setEditId]=useState("");
   const [editProductId,setEditProductId]=useState("");
   const [editName,setEditName]=useState(true);
+  const blankValues = () => Object.fromEntries(MASTER_VALUE_FIELDS.map(([field]) => [field, ""]));
+  const [editValues,setEditValues]=useState(blankValues);
 
   const saveMapping = async () => {
     try {
-      await api.updateMasterProduct(editId, editProductId, editName);
+      await api.updateMasterProduct(editId, editProductId, editName, editValues);
       setEditId(""); await reload(); notify("Product Master mapping updated.");
     } catch(e){notify(e.message);}
   };
@@ -947,12 +1130,13 @@ function ProductMaster({ state, reload, notify }) {
   const [addCode,setAddCode]=useState("");
   const [addSku,setAddSku]=useState("");
   const [addName,setAddName]=useState("");
+  const [addValues,setAddValues]=useState(blankValues);
   const [addError,setAddError]=useState("");
-  const openAdd = () => { setAddCode(""); setAddSku(""); setAddName(""); setAddError(""); setShowAdd(true); };
+  const openAdd = () => { setAddCode(""); setAddSku(""); setAddName(""); setAddValues(blankValues()); setAddError(""); setShowAdd(true); };
   const addProduct = async () => {
     setAddError("");
     try {
-      await api.addMasterProduct({ companyId, marketplace, code: addCode, sku: addSku, name: addName });
+      await api.addMasterProduct({ companyId, marketplace, code: addCode, sku: addSku, name: addName, ...addValues });
       setShowAdd(false); await reload(); notify("Product Master mapping added.");
     } catch(e){ setAddError(e.message); }
   };
@@ -994,7 +1178,7 @@ function ProductMaster({ state, reload, notify }) {
       </div>}
       {ready && <>
         <h3 className="sub-h">Product Sheet</h3>
-        <div className="table-wrap"><table><thead><tr><th>Warehouse Product Code</th><th>Marketplace SKU</th><th>Product Name</th><th className="n">Action</th></tr></thead>
+        <div className="table-wrap"><table><thead><tr><th>Warehouse Product Code</th><th>Marketplace SKU</th><th>Product Name</th>{MASTER_VALUE_FIELDS.map(([field,label])=><th key={field}>{label}</th>)}<th className="n">Action</th></tr></thead>
         <tbody>{saved.length ? saved.map(m=>editId===m.id
           ? <tr key={m.id} className="is-editing">
               <td><select value={editProductId} onChange={e=>setEditProductId(e.target.value)}>
@@ -1002,6 +1186,7 @@ function ProductMaster({ state, reload, notify }) {
               </select></td>
               <td><span className="code">{m.marketplaceSku}</span></td>
               <td><label className="check-label"><input type="checkbox" checked={editName} onChange={e=>setEditName(e.target.checked)}/> Also use the warehouse product name</label></td>
+              {MASTER_VALUE_FIELDS.map(([field,label])=><td key={field}><input aria-label={`Edit ${label}`} type="number" step="0.01" min={field==='estimated_profit'?undefined:0} value={editValues[field]} onChange={e=>setEditValues(v=>({...v,[field]:e.target.value}))}/></td>)}
               <td className="actions"><span className="row-acts">
                 <button className="icon-btn" title="Save" aria-label="Save" onClick={saveMapping}><Icon name="check" size={16}/></button>
                 <button className="icon-btn" title="Cancel" aria-label="Cancel" onClick={()=>setEditId("")}><Icon name="x" size={16}/></button>
@@ -1009,11 +1194,12 @@ function ProductMaster({ state, reload, notify }) {
             </tr>
           : <tr key={m.id}>
               <td><span className="code">{codeOf(m.productId)}</span></td><td><span className="code">{m.marketplaceSku}</span></td><td>{m.productName}</td>
+              {MASTER_VALUE_FIELDS.map(([field])=><td key={field}>{m[field]===null || m[field]===undefined ? "—" : new Intl.NumberFormat('en-IN',{style:'currency',currency:'INR',minimumFractionDigits:2,maximumFractionDigits:2}).format(m[field])}</td>)}
               <td className="actions"><span className="row-acts">
-                <button className="icon-btn" title="Edit mapping" aria-label="Edit mapping" onClick={()=>{setEditId(m.id); setEditProductId(m.productId); setEditName(true);}}><Icon name="pencil" size={15}/></button>
+                <button className="icon-btn" title="Edit mapping" aria-label="Edit mapping" onClick={()=>{setEditId(m.id); setEditProductId(m.productId); setEditName(true); setEditValues(Object.fromEntries(MASTER_VALUE_FIELDS.map(([field])=>[field,m[field]??""])));}}><Icon name="pencil" size={15}/></button>
                 <button className="icon-btn danger" title="Remove mapping" aria-label="Remove mapping" onClick={()=>removeMapping(m)}><Icon name="trash" size={15}/></button>
               </span></td>
-            </tr>) : <EmptyRow colSpan="4">No Product Master mappings for this company and marketplace yet.</EmptyRow>}</tbody></table></div>
+            </tr>) : <EmptyRow colSpan="8">No Product Master mappings for this company and marketplace yet.</EmptyRow>}</tbody></table></div>
       </>}
       {showAdd && <div className="backdrop" onClick={()=>setShowAdd(false)}>
         <div className="dialog" role="dialog" aria-modal="true" aria-labelledby="pm-add-title" onClick={e=>e.stopPropagation()}>
@@ -1026,6 +1212,7 @@ function ProductMaster({ state, reload, notify }) {
               <label>Warehouse Product Code<input className="code" value={addCode} onChange={e=>setAddCode(e.target.value)} autoFocus/></label>
               <label>Marketplace SKU<input className="code" value={addSku} onChange={e=>setAddSku(e.target.value)}/></label>
               <label>Product Name<input value={addName} onChange={e=>setAddName(e.target.value)}/></label>
+              {MASTER_VALUE_FIELDS.map(([field,label])=><label key={field}>{label}<input type="number" step="0.01" min={field==='estimated_profit'?undefined:0} value={addValues[field]} onChange={e=>setAddValues(v=>({...v,[field]:e.target.value}))}/></label>)}
             </div>
             {addError && <p className="form-error"><Icon name="error" size={14}/><span>{addError}</span></p>}
           </div>
@@ -1112,7 +1299,7 @@ function Agents({ state, reload, notify }) {
   const companyOf = a => state.companies.find(c=>c.id===a?.companyId)?.name || "—";
   const marketplacesOf = id => ["Amazon","Flipkart","Meesho"].filter(m=>state.accounts.some(x=>x.agentId===id && x.marketplace===m)).join(" • ");
   // Same cumulative wallet formula everywhere: see client/src/wallet.js (mirrors server walletTotals exactly).
-  const totals = id => agentWalletTotals(state.ledger, id, state.walletResets);
+  const totals = id => agentWalletTotals(state.ledger, id, state.walletResets,state);
   const shownAgents = companyFilter ? activeAgents.filter(a => a.companyId === companyFilter) : activeAgents;
 
   // Wallet card: ledger totals for the agents currently shown (all companies, or just the filtered one). Nothing is stored.
@@ -1254,7 +1441,6 @@ function Agents({ state, reload, notify }) {
           {lastReset && <div className="kv-line"><span>Current wallet since reset on <b>{localDateTime(lastReset.resetAt, lastReset.date)}</b> — earlier sales, refunds and payments stay in the history below and in reports.</span></div>}
         </div>
         <div className="acts">
-          <button className="danger sm" title="Start this agent's current wallet again from ₹0 (history is kept)" onClick={()=>resetWallet(viewAgent)}><Icon name="refund" size={14}/>Reset Wallet</button>
           <button className="icon-btn" title="Close" aria-label="Close wallet details" onClick={()=>setViewAgentId("")}><Icon name="x" size={16}/></button>
         </div>
       </div>
@@ -1266,6 +1452,7 @@ function Agents({ state, reload, notify }) {
         <Stat label="Current Balance" value={<Money n={wt.pending}/>} className="primary" />
       </div>
 
+      <AgentDateLedger key={viewAgent.id} state={state} agentId={viewAgent.id}/>
       <div className="detail-sec">
         <h3 className="sub-h">Marketplace Breakdown</h3>
         {bd.byMarketplace.length
@@ -1284,8 +1471,7 @@ function Agents({ state, reload, notify }) {
               <td className="strong">{g.productName}</td><td><span className="code">{g.code}</span></td><td><Mkt name={g.marketplace}/></td><td className="n">{g.qty}</td><td className="n"><Money n={g.unitCost}/></td><td className="n"><Money n={g.stockCost}/></td><td className="n"><Money n={g.sales}/></td>
             </tr>)}</tbody></table></div>
           : <div className="empty">No sales for this agent yet.</div>}
-        {bd.refundCount > 0 && <p className="note">This agent has {bd.refundCount} refund{bd.refundCount===1?"":"s"}. A refunded sale's Qty Sold and Sale Amount above are not counted; its Total Stock Cost is
-          reduced by the FULL sale amount (not just its cost), the same rule used everywhere else in SellQuanta - so a row can show a small negative amount. The totals above still add up exactly to Total Stock Cost Due.</p>}
+        {bd.refundCount > 0 && <p className="note">Refund quantities reverse their original sale-time stock cost. Customer selling amounts are not deducted from stock cost due.</p>}
       </div>
 
       <div className="detail-sec">
@@ -1311,6 +1497,9 @@ function Agents({ state, reload, notify }) {
 
 // Refunds: only sales still inside the 10-day window that have not been refunded. The server enforces the same rules.
 function Refunds({ state, reload, notify }) {
+  const [selectedSale,setSelectedSale]=useState(null);
+  const [refundReason,setRefundReason]=useState("");
+  const refundPending=useRef(false);
   const [search, setSearch] = useState("");
   const [busyId, setBusyId] = useState("");
   const q = search.trim().toLowerCase();
@@ -1321,17 +1510,28 @@ function Refunds({ state, reload, notify }) {
   const dayOf = iso => saleDay({ createdAt: iso });
 
   const refund = async s => {
-    if (!window.confirm(`Refund order ${s.orderId || s.id}?\n\n${s.productName} × ${s.qty} · ${money(s.saleAmount)}\n\nThe quantity goes back to the warehouse and the agent's Sales Due is reduced. A sale can be refunded only once.`)) return;
+    if(!REFUND_REASONS.includes(refundReason)||refundPending.current)return;
+    refundPending.current=true;
     setBusyId(s.id);
     try {
-      await api.refundSale(s.id);
+      await api.refundSale(s.id,refundReason);
+      setSelectedSale(null);setRefundReason("");
       await reload();
       notify(`Refund recorded for ${s.orderId || "the sale"}: ${money(s.saleAmount)}, stock returned.`);
     } catch(e) { notify(e.message); }
-    finally { setBusyId(""); }
+    finally { refundPending.current=false;setBusyId(""); }
   };
 
   return <>
+    {selectedSale&&<div className="backdrop"><div className="dialog" role="dialog" aria-modal="true" aria-labelledby="refund-confirm-title">
+      <div className="ph"><h3 id="refund-confirm-title">Confirm Refund</h3></div>
+      <div className="pb"><p>Order ID: <b>{selectedSale.orderId||selectedSale.id}</b></p><p>Product: {selectedSale.productName}</p><p>Marketplace: {selectedSale.marketplace}</p><p>Quantity: {selectedSale.qty}</p><p>Sale Amount: <Money n={selectedSale.saleAmount}/></p>
+        <label>Refund Reason<select aria-label="Refund Reason" required disabled={!!busyId} value={refundReason} onChange={e=>setRefundReason(e.target.value)}><option value="">Select a reason</option>{REFUND_REASONS.map(reason=><option key={reason}>{reason}</option>)}</select></label>
+        <p className="field-note">The existing refund returns quantity to stock and reduces the agent's Sales Due. A sale can be refunded only once.</p>
+        <div className="inline"><button className="ghost" disabled={!!busyId} onClick={()=>{setSelectedSale(null);setRefundReason("");}}>Cancel</button><button className="danger" disabled={!!busyId||!refundReason} onClick={()=>refund(selectedSale)}>{busyId?'Processing?':'Confirm Refund'}</button></div>
+      </div>
+    </div></div>}
+
     <Card className="flush">
       <div className="ph"><h3>Refund</h3>
         <div className="acts"><input style={{width:240,height:32}} aria-label="Search Order ID" placeholder="Search Order ID" value={search} onChange={e=>setSearch(e.target.value)} /></div>
@@ -1341,147 +1541,18 @@ function Refunds({ state, reload, notify }) {
       <tbody>{eligible.length ? eligible.map(s => <tr key={s.id}>
         <td className="nowrap">{saleLocalDay(s)}</td><td>{s.orderId ? <span className="code">{s.orderId}</span> : "—"}</td><td className="sub">{companyName(s)}</td><td>{agentName(s)}</td><td><Mkt name={s.marketplace}/></td>
         <td className="wrap">{s.productName}</td><td className="n">{s.qty}</td><td className="n"><Money n={s.saleAmount}/></td>
-        <td className="actions"><button className="danger sm" disabled={busyId === s.id} onClick={()=>refund(s)}><Icon name="refund" size={13}/>Refund</button></td>
+        <td className="actions"><button className="danger sm" disabled={busyId === s.id} onClick={()=>{setSelectedSale(s);setRefundReason("");}}><Icon name="refund" size={13}/>Refund</button></td>
       </tr>) : <EmptyRow colSpan="9">{q ? "No refundable sale matches that Order ID." : "No refundable sales in the last 10 days."}</EmptyRow>}</tbody></table></div>
     </Card>
 
     <Card className="flush">
       <div className="ph"><h3>Refund History</h3><span className="meta">{history.length} refund{history.length === 1 ? "" : "s"} · newest first</span></div>
-      <div className="table-wrap"><table className="table-dense"><thead><tr><th>Refund Date</th><th>Original Sale Date</th><th>Original Sale ID</th><th>Order ID</th><th>Company</th><th>Agent</th><th>Marketplace</th><th>Marketplace SKU</th><th>Warehouse Product Code</th><th>Product Name</th><th className="n">Qty</th><th className="n">Refund Amount</th><th>Refund ID</th></tr></thead>
-      <tbody>{history.length ? history.map(r => <tr key={r.id}>
+      <div className="table-wrap"><table className="table-dense"><thead><tr><th>Refund Date</th><th>Original Sale Date</th><th>Original Sale ID</th><th>Order ID</th><th>Company</th><th>Agent</th><th>Marketplace</th><th>Marketplace SKU</th><th>Warehouse Product Code</th><th>Product Name</th><th className="n">Qty</th><th className="n">Refund Amount</th><th>Refund Reason</th><th>Marketplace Match</th><th className="n">Return Extra Charge</th><th>Refund ID</th></tr></thead>
+      <tbody>{history.length ? history.map(r => {const match=refundMarketplaceMatch(r,state.returnCharges);return <tr key={r.id}>
         <td className="nowrap">{r.refundDate || dayOf(r.refundedAt)}</td><td className="nowrap">{r.saleDate}</td><td title={r.saleId}><span className="code">{r.saleId.slice(0, 13)}…</span></td><td>{r.orderId ? <span className="code">{r.orderId}</span> : "—"}</td><td className="sub">{r.companyName || "—"}</td><td>{r.agentName || "—"}</td>
-        <td><Mkt name={r.marketplace}/></td><td className="wrap">{r.marketplaceSku ? <span className="code">{r.marketplaceSku}</span> : "—"}</td><td><span className="code">{r.warehouseProductCode}</span></td><td className="wrap">{r.productName}</td><td className="n">{r.qty}</td><td className="n"><Money n={r.refundAmount}/></td><td title={r.id}><span className="badge arch">Refunded</span> <span className="code muted">{r.id.slice(0, 15)}…</span></td>
-      </tr>) : <EmptyRow colSpan="13">No refunds yet.</EmptyRow>}</tbody></table></div>
+        <td><Mkt name={r.marketplace}/></td><td className="wrap">{r.marketplaceSku ? <span className="code">{r.marketplaceSku}</span> : "—"}</td><td><span className="code">{r.warehouseProductCode}</span></td><td className="wrap">{r.productName}</td><td className="n">{r.qty}</td><td className="n"><Money n={r.refundAmount}/></td><td>{r.refundReason||"Not classified"}</td><td><span className={`badge ${match.badge}`}>{match.status}</span></td><td className="n">{match.cents===null?"\u2014":<span className="money">{new Intl.NumberFormat("en-IN",{style:"currency",currency:"INR",minimumFractionDigits:2,maximumFractionDigits:2}).format(match.cents/100)}</span>}</td><td title={r.id}><span className="badge arch">Refunded</span> <span className="code muted">{r.id.slice(0, 15)}…</span></td>
+      </tr>;}) : <EmptyRow colSpan="16">No refunds yet.</EmptyRow>}</tbody></table></div>
     </Card>
   </>;
 }
 
-function CloseDay({ state, reload, notify, busy, setBusy, onBusinessReset }) {
-  const qty = state.todaySales.reduce((a,s)=>a+Number(s.qty||0),0);
-  const amount = state.todaySales.reduce((a,s)=>a+Number(s.saleAmount||0),0);
-
-  const close = async () => {
-    if (!window.confirm("Export today's Excel and clear ONLY the Daily Sales screen? Warehouse, agents, ledger and history will stay saved.")) return false;
-    setBusy(true);
-    try {
-      const {blob,name} = await api.closeDay();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a"); a.href=url; a.download=name; a.click();
-      setTimeout(()=>URL.revokeObjectURL(url),1000);
-      await reload();
-      notify("Day closed. Excel saved. Daily Sales reset only.");
-    } catch(e){notify(e.message); throw e;}
-    finally{setBusy(false);}
-  };
-
-  return <>
-  <Card className="flush close-card">
-    <div className="close-grid">
-      <section>
-        <div className="close-title"><span className="big-icon"><Icon name="sheet" size={18}/></span><h2>Close Today's Sales</h2></div>
-        <p>Creates Excel with Daily Sales, Agent Summary, Product Usage and current Warehouse Stock.</p>
-        <div className="close-stats"><span><b>{state.todaySales.length}</b> orders</span><span><b>{qty}</b> quantity</span><span><b><Money n={amount}/></b> sales</span></div>
-        <DownloadButton action={close} label="Export Excel + Reset Daily Sales" busyLabel="Closing…" className="primary big" iconSize={16} disabled={busy || !state.todaySales.length}/>
-        {!busy && !state.todaySales.length && <p className="disabled-why">No sales to close today.</p>}
-      </section>
-      <section>
-        <h3 className="sub-h" style={{padding:"0 0 10px"}}>What happens</h3>
-        <ul className="close-list">
-          <li><Icon name="sheet" size={15}/><span>An Excel file is exported for today.</span></li>
-          <li><Icon name="refund" size={15}/><span>Only the Daily Sales screen is cleared.</span></li>
-        </ul>
-        <div className="safe-note"><Icon name="shield" size={15}/><span>Permanent data stays safe: warehouse stock, products, agents, accounts, wallet ledger, stock movements and archived sales.</span></div>
-      </section>
-    </div>
-  </Card>
-  <MonthCloseCard state={state} reload={reload} notify={notify} />
-  <BackupCard notify={notify} />
-  <CompleteReset onComplete={onBusinessReset} />
-  </>;
-}
-
-// Archives the ENTIRE currently active Sales + Wallet period (today's sales, all of Sales History, and every SALE /
-// PAYMENT ledger entry) into a permanent, read-only snapshot, then resets those so the next month starts fresh -
-// including releasing old Order IDs from duplicate detection. See server /api/month-close for exactly what is, and
-// is not, touched. Warehouse, Product Master, agents/accounts/companies, refunds and stock are never touched here.
-function MonthCloseCard({ state, reload, notify }) {
-  const [busy, setBusy] = useState(false);
-  const [archives, setArchives] = useState(null);
-  const [open, setOpen] = useState(false);
-
-  const load = () => api.monthCloseList().then(r => setArchives(r.archives)).catch(() => {});
-  useEffect(() => { load(); }, []);
-
-  const activeSales = state.todaySales.length + state.salesHistory.length;
-  const activeQty = [...state.todaySales, ...state.salesHistory].reduce((t, s) => t + Number(s.qty || 0), 0);
-  const activeAmount = [...state.todaySales, ...state.salesHistory].reduce((t, s) => t + Number(s.saleAmount || 0), 0);
-
-  const closeMonth = async () => {
-    const question = `Close Month?\n\n`
-      + `This will archive ${activeSales} active sale(s) (${money(activeAmount)}, ${activeQty} unit(s)) and the agent wallet's Sales/Payment entries into a permanent, read-only record.\n\n`
-      + `After that:\n`
-      + `• Daily Sales and Sales History are emptied - old Order IDs become free to scan/add again.\n`
-      + `• Every agent's Sales Due / Paid / Balance restarts from ₹0.\n\n`
-      + `Warehouse stock, Product Master, agents, accounts, companies and refunds are NOT changed. Archived sales stay permanently visible below, read-only.\n\n`
-      + `This cannot be undone from the app. Continue?`;
-    if (!window.confirm(question)) return;
-    setBusy(true);
-    try {
-      const r = await api.monthClose();
-      await reload();
-      await load();
-      notify(`Month closed: ${r.salesArchived} sale(s) archived. Sales and Wallet are reset for the new active period.`);
-    } catch (e) { notify(e.message); }
-    finally { setBusy(false); }
-  };
-
-  return <Card className="flush">
-    <div className="ph"><h3>Month Close</h3>
-      <div className="acts"><button className="ghost" disabled={busy || !activeSales} onClick={closeMonth}><Icon name="archive" size={15}/>{busy ? "Closing…" : "Close Month"}</button></div>
-    </div>
-    <div className="pb">
-      <p className="muted" style={{margin:"0 0 6px",lineHeight:1.55}}>Archives the current active Sales and Agent Wallet period permanently, then starts the next month fresh. Use this occasionally (e.g. once a month) - Daily "Export Excel + Reset Daily Sales" above stays for everyday use and does not touch the wallet.</p>
-      {activeSales > 0 && <p className="kv-line" style={{margin:0}}><span>Currently active: <b>{activeSales}</b> sale(s) · <b>{activeQty}</b> unit(s) · <b>{money(activeAmount)}</b></span></p>}
-      {archives && archives.length > 0 && <div style={{marginTop:12}}>
-        <button className="quiet sm" onClick={()=>setOpen(o=>!o)}><Icon name="chevron" size={13} className={open ? "rot90" : ""}/>{open ? "Hide" : "Show"} closed months ({archives.length})</button>
-      </div>}
-    </div>
-    {archives && archives.length > 0 && open && <div className="table-wrap" style={{borderTop:"1px solid var(--line)"}}><table className="table-dense"><thead><tr><th>Closed</th><th className="n">Sales</th><th className="n">Agents</th><th className="n">Total Due</th><th className="n">Total Paid</th><th className="n">Balance</th></tr></thead>
-      <tbody>{archives.map(a=>{
-        const totals = a.agentSummary.reduce((t,x)=>({due:t.due+x.due,paid:t.paid+x.paid,balance:t.balance+x.balance}),{due:0,paid:0,balance:0});
-        return <tr key={a.id} className="is-archived">
-          <td className="nowrap">{new Date(a.closedAt).toLocaleString("en-IN")}</td>
-          <td className="n">{a.salesCount}</td>
-          <td className="n">{a.agentSummary.length}</td>
-          <td className="n"><Money n={totals.due}/></td>
-          <td className="n"><Money n={totals.paid}/></td>
-          <td className="n"><Money n={totals.balance}/></td>
-        </tr>;
-      })}</tbody></table></div>}
-  </Card>;
-}
-
-// Data safety: shows the automatic daily backups and lets you take an extra backup right now.
-function BackupCard({ notify }) {
-  const [info, setInfo] = useState(null);
-  const [busy, setBusy] = useState(false);
-  const load = () => api.backupInfo().then(setInfo).catch(() => {});
-  useEffect(() => { load(); }, []);
-
-  const backupNow = async () => {
-    setBusy(true);
-    try { const r = await api.backupNow(); notify(`Backup saved: ${r.file}`); await load(); }
-    catch(e) { notify(e.message); }
-    finally { setBusy(false); }
-  };
-
-  return <Card className="flush">
-    <div className="ph"><h3>Data Backup</h3>
-      <div className="acts"><button className="ghost" disabled={busy} onClick={backupNow}><Icon name="shield" size={15}/>{busy ? "Backing up…" : "Back Up Now"}</button></div>
-    </div>
-    <div className="pb">
-      <p className="muted" style={{margin:"0 0 6px",lineHeight:1.55}}>SellQuanta saves one backup per day automatically in the <b>backups</b> folder and keeps the latest {info?.keepDays ?? 30} days. Everything you enter is stored on this computer only.</p>
-      {info && <p className="kv-line" style={{margin:0}}><span>Automatic backups kept: <b>{info.dailyCount}</b></span>{info.newestDaily ? <span>latest: <b>{info.newestDaily}</b></span> : null}<span>Manual backups: <b>{info.manualCount}</b> (in backups/manual)</span></p>}
-    </div>
-  </Card>;
-}

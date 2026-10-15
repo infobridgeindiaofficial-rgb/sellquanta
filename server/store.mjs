@@ -23,6 +23,7 @@ export const emptyDb = () => ({
   products: [],
   productMaster: [],
   todaySales: [],
+  purchases: [], // Independent Purchase Ledger; never changes inventory or sales.
   salesHistory: [],
   ledger: [],
   stockMovements: [],
@@ -57,6 +58,7 @@ function normalize(db) {
     refunds: Array.isArray(db.refunds) ? db.refunds : [],
     productMaster: migrateProductMaster(Array.isArray(db.productMaster) ? db.productMaster : [], companies, agents),
     todaySales: Array.isArray(db.todaySales) ? db.todaySales : [],
+    purchases: Array.isArray(db.purchases) ? db.purchases : [],
     salesHistory: Array.isArray(db.salesHistory) ? db.salesHistory : [],
     ledger: Array.isArray(db.ledger) ? db.ledger : [],
     stockMovements: Array.isArray(db.stockMovements) ? db.stockMovements : [],

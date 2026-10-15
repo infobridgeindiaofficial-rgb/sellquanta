@@ -15,10 +15,11 @@ export function currentWalletEntries(ledger, agentId, walletResets) {
   const before = new Set(latestWalletReset(walletResets, agentId)?.excludedLedgerIds || []);
   return (ledger || []).filter(l => l.agentId === agentId && !before.has(l.id));
 }
-export function agentWalletTotals(ledger, agentId, walletResets) {
+import {stockLedgerCents} from '../../server/stockCost.mjs';
+export function agentWalletTotals(ledger, agentId, walletResets,state) {
   const entries = currentWalletEntries(ledger, agentId, walletResets);
   const cents = type => Math.round(entries.filter(l => l.type === type).reduce((t, l) => t + Number(l.amount || 0), 0) * 100);
-  const due = cents("SALE") / 100;
+  const due = state?entries.filter(l=>l.type==='SALE').reduce((sum,l)=>sum+stockLedgerCents(l,state),0)/100:cents("SALE")/100;
   const paid = (cents("PAYMENT") + cents("SETTLEMENT")) / 100;
   return { due, paid, pending: Math.max(0, Math.round((due - paid) * 100) / 100) };
 }

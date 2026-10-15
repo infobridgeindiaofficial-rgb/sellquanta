@@ -26,6 +26,7 @@ stockpilot.json
 
 # Real labels, invoices and scan diagnostics must never be committed
 *.pdf
+/test-statements/
 scan-diagnostics*
 
 # Secrets and local configuration

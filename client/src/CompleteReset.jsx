@@ -33,12 +33,12 @@ export default function CompleteReset({ onComplete }) {
   return <details className="card">
     <summary className="strong">Danger Zone</summary>
     <h3>Complete Reset / Start New Business</h3>
-    <p className="muted">Removes all current business data and returns SellQuanta to first-time setup. This cannot be undone without a backup.</p>
+    <p className="muted">Resets current business data and returns SellQuanta to first-time setup. Permanent Banking receipts and their audit history are retained. This cannot be undone without a backup.</p>
     {phase === "closed" && <button className="danger" onClick={() => { setError(""); setPhase("review"); }}>Complete Reset</button>}
     {phase === "review" && <section role="dialog" aria-label="Review Complete Reset">
       <h3>Step 1: Review what will be removed</h3>
       <p>All companies (including archived companies), agents and marketplace accounts, warehouse products and images, stock history, Product Master mappings, sales and order IDs, wallet transactions, refunds, Month Close archives, correction/undo history and business settings will be removed from the active database.</p>
-      <p>A full JSON backup must be written and verified before anything is reset. Existing safety backups and saved Excel reports are kept as inactive files. SellQuanta's features remain available.</p>
+      <p>Permanent Banking receipts and their audit history remain saved. A full JSON backup must be written and verified before anything is reset. Existing safety backups and saved Excel reports are kept as inactive files. SellQuanta's features remain available.</p>
       <div className="inline">
         <button className="ghost" disabled={busy} onClick={cancel}>Cancel</button>
         <button className="danger" disabled={busy} onClick={prepare}>{busy ? "Preparing confirmation…" : "Continue to Confirmation"}</button>

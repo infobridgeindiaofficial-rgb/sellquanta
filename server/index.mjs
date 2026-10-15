@@ -1,19 +1,37 @@
+import {manualSaleDate} from './manualSaleDate.mjs';
 import express from "express";
 import cors from "cors";
 import fs from "node:fs";
 import path from "node:path";
 import XLSX from "xlsx";
+import {writeThemedWorkbook} from './excelTheme.mjs';
+import {buildBulkTemplate,bulkHeaderIndex} from './bulkTemplates.mjs';
 import { readDb, mutate, uid, paths, emptyDb, ensureAccounts, dedupeAgents, migrateSaleCosts, assignLegacyBatches, backfillSaleHistory, autoBackupOncePerDay, manualBackup, backupInfo } from "./store.mjs";
 import { ensureOllama, scanLabel, OLLAMA_SETTINGS } from "./ollama.mjs";
-import { buildDayWorkbook } from "./excel.mjs";
+import {registerSalesReportRoutes} from "./salesReports.mjs";
+import {registerMasterChartRoutes} from './masterChartExport.mjs';
+import {registerPurchaseRoutes} from './purchaseLedger.mjs';
+import {requireRefundReason} from './refundClassification.mjs';
+import {stockLedgerCents,saleStockCents} from './stockCost.mjs';
+import {registerReturnChargeRoutes,createReturnChargePersistence} from './returnChargeRoutes.mjs';
 import { buildWarehouseBackup, buildCompanyMasterBackup, companyBackupFilename, backupDate } from "./backupExports.mjs";
+import { MASTER_VALUE_FIELDS, masterValues } from './masterValues.mjs';
+import { financialMapping, captureFinancialSnapshot } from './financialSnapshot.mjs';
 import { createCompleteReset } from "./completeReset.mjs";
+import { registerBankStatementRoutes } from './bankStatementRoutes.mjs';
+import { createBankReceiptPersistence } from './bankReceiptImport.mjs';
 
 const app = express();
 const PORT = Number(process.env.PORT || 8787);
 
 app.use(cors());
 app.use(express.json({ limit: "35mb" }));
+registerBankStatementRoutes(app, { readDb, persist:createBankReceiptPersistence({dbFile:paths.dbFile,backupDir:path.join(paths.backupDir,'manual')}) });
+
+registerSalesReportRoutes(app,{readDb});
+registerMasterChartRoutes(app,{readDb});
+registerPurchaseRoutes(app,{readDb,mutate});
+registerReturnChargeRoutes(app,{readDb,persist:createReturnChargePersistence({dbFile:paths.dbFile,backupDir:path.join(paths.backupDir,'manual')})});
 
 const today = () => new Date().toISOString().slice(0, 10);
 const num = v => Number(v || 0);
@@ -49,7 +67,7 @@ function currentWalletEntries(db, agentId) {
 function walletTotals(db, agentId) {
   const entries = currentWalletEntries(db, agentId);
   const cents = type => Math.round(entries.filter(l => l.type === type).reduce((t, l) => t + num(l.amount), 0) * 100);
-  const dueCents = cents("SALE");
+  const dueCents = entries.filter(l=>l.type==='SALE').reduce((sum,l)=>sum+stockLedgerCents(l,db),0);
   const creditCents = cents("PAYMENT") + cents("SETTLEMENT");
   return { dueCents, creditCents, balanceCents: dueCents - creditCents, pendingCents: Math.max(0, dueCents - creditCents) };
 }
@@ -91,7 +109,7 @@ app.post("/api/business-reset", (req, res) => {
 // Export-only reads deliberately bypass readDb's missing-file initialization and
 // legacy normalization. These endpoints never save, migrate or back up the database.
 function sendBackupWorkbook(res, workbook, filename) {
-  const buffer = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
+  const buffer = writeThemedWorkbook(workbook);
   res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
   res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
   res.setHeader("Access-Control-Expose-Headers", "Content-Disposition");
@@ -430,9 +448,10 @@ function parseWarehouseSheet(fileBase64, products) {
   const sheet = wb.Sheets["WAREHOUSE"];
   if (!sheet) throw new Error('Sheet named "WAREHOUSE" was not found in the Excel file.');
 
-  const raw = XLSX.utils.sheet_to_json(sheet, { defval: "", blankrows: true });
+  const headerIndex=bulkHeaderIndex(sheet);
+  const raw = XLSX.utils.sheet_to_json(sheet, { range:headerIndex, defval: "", blankrows: true });
   const headers = ["warehouse_product_code", "product_name", "COST PRICE", "OPENING STOCK"];
-  const found = (XLSX.utils.sheet_to_json(sheet, { header: 1 })[0] || []).map(h => String(h).trim());
+  const found = (XLSX.utils.sheet_to_json(sheet, { range:headerIndex, header: 1 })[0] || []).map(h => String(h).trim());
   const missing = headers.filter(h => !found.includes(h));
   if (missing.length) throw new Error(`Missing column(s): ${missing.join(", ")}`);
 
@@ -453,7 +472,7 @@ function parseWarehouseSheet(fileBase64, products) {
     if (code && seen.has(code.toLowerCase())) errors.push("duplicate code in file");
     if (code) seen.add(code.toLowerCase());
     rows.push({
-      row: i + 2, code, name,
+      row: i + 2 + headerIndex, code, name,
       costPrice: isNumeric(r["COST PRICE"]) ? Number(r["COST PRICE"]) : r["COST PRICE"],
       openingStock: isNumeric(r["OPENING STOCK"]) ? Number(r["OPENING STOCK"]) : r["OPENING STOCK"],
       status: errors.length ? "Error" : existing.has(code.toLowerCase()) ? "Existing" : "New",
@@ -464,11 +483,10 @@ function parseWarehouseSheet(fileBase64, products) {
 }
 
 app.get("/api/products/import-template", (_req, res) => {
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([["warehouse_product_code", "product_name", "COST PRICE", "OPENING STOCK"]]), "WAREHOUSE");
+  const wb=buildBulkTemplate("WAREHOUSE",["warehouse_product_code", "product_name", "COST PRICE", "OPENING STOCK"]);
   res.setHeader("Content-Disposition", 'attachment; filename="StockPilot_Warehouse_Import_Template.xlsx"');
   res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-  res.send(XLSX.write(wb, { type: "buffer", bookType: "xlsx" }));
+  res.send(writeThemedWorkbook(wb,{template:true}));
 });
 
 app.post("/api/products/import-preview", (req, res) => {
@@ -513,7 +531,8 @@ app.post("/api/products/import", (req, res) => {
 
 // ---- Product Master: Company + Marketplace SKU -> Warehouse product ----
 const MARKETPLACES = ["Amazon", "Flipkart", "Meesho"];
-const MASTER_COLUMNS = ["warehouse_product_code", "marketplace_sku", "product_name"];
+const MASTER_REQUIRED_COLUMNS = ["warehouse_product_code", "marketplace_sku", "product_name"];
+const MASTER_COLUMNS = [...MASTER_REQUIRED_COLUMNS, ...MASTER_VALUE_FIELDS.map(([field]) => field)];
 
 function masterScope(db, companyId, marketplace) {
   const company = requireActiveCompany(db, companyId);
@@ -528,11 +547,12 @@ function parseProductMasterSheet(db, companyId, marketplace, fileBase64) {
   const sheet = wb.Sheets["PRODUCT_MASTER"];
   if (!sheet) throw new Error('Sheet named "PRODUCT_MASTER" was not found in the Excel file.');
 
-  const found = (XLSX.utils.sheet_to_json(sheet, { header: 1 })[0] || []).map(h => String(h).trim());
-  const missing = MASTER_COLUMNS.filter(h => !found.includes(h));
+  const headerIndex=bulkHeaderIndex(sheet);
+  const found = (XLSX.utils.sheet_to_json(sheet, { range:headerIndex, header: 1 })[0] || []).map(h => String(h).trim());
+  const missing = MASTER_REQUIRED_COLUMNS.filter(h => !found.includes(h));
   if (missing.length) throw new Error(`Missing column(s): ${missing.join(", ")}`);
 
-  const raw = XLSX.utils.sheet_to_json(sheet, { defval: "", blankrows: true });
+  const raw = XLSX.utils.sheet_to_json(sheet, { range:headerIndex, defval: "", blankrows: true });
   const byCode = new Map(db.products.map(p => [p.sku.toLowerCase(), p]));
   const existing = new Set(db.productMaster
     .filter(m => m.companyId === companyId && String(m.marketplace).toLowerCase() === marketplace.toLowerCase())
@@ -545,6 +565,12 @@ function parseProductMasterSheet(db, companyId, marketplace, fileBase64) {
     const sku = String(r.marketplace_sku ?? "").trim();
     const name = String(r.product_name ?? "").trim();
     const errors = [];
+    let values = {};
+    try { values = masterValues(r, { preserveBlanks: true }); } catch (e) { errors.push(e.message); }
+    for (const [field] of MASTER_VALUE_FIELDS) {
+      const col = found.indexOf(field);
+      if (col >= 0 && sheet[XLSX.utils.encode_cell({r:i+1+headerIndex,c:col})]?.f) errors.push(`${field} must contain a manual value, not a formula.`);
+    }
     if (!code) errors.push("warehouse_product_code required");
     if (!sku) errors.push("marketplace_sku required");
     if (!name) errors.push("product_name required");
@@ -553,7 +579,7 @@ function parseProductMasterSheet(db, companyId, marketplace, fileBase64) {
     if (sku && seen.has(sku.toLowerCase())) errors.push("duplicate marketplace_sku in file");
     if (sku) seen.add(sku.toLowerCase());
     rows.push({
-      row: i + 2, code, sku, name,
+      row: i + 2 + headerIndex, code, sku, name, values,
       productId: byCode.get(code.toLowerCase())?.id || "",
       status: errors.length ? "Error" : existing.has(sku.toLowerCase()) ? "Existing" : "New",
       error: errors.join("; ")
@@ -565,12 +591,11 @@ function parseProductMasterSheet(db, companyId, marketplace, fileBase64) {
 app.get("/api/product-master/template", (req, res) => {
   try {
     const company = masterScope(readDb(), String(req.query.companyId || ""), String(req.query.marketplace || ""));
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([MASTER_COLUMNS]), "PRODUCT_MASTER");
+    const wb=buildBulkTemplate("PRODUCT_MASTER",MASTER_COLUMNS);
     const fileName = `${company.name}_${req.query.marketplace}_Product_Master.xlsx`.replace(/[^\w.-]+/g, "_");
     res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-    res.send(XLSX.write(wb, { type: "buffer", bookType: "xlsx" }));
+    res.send(writeThemedWorkbook(wb,{template:true}));
   } catch (e) {
     res.status(400).json({ error: e.message });
   }
@@ -595,8 +620,10 @@ app.post("/api/product-master/:id/product", (req, res) => {
       requireActiveCompany(db, m.companyId);
       const p = db.products.find(x => x.id === String(req.body?.productId || ""));
       if (!p || !isActive(p)) throw new Error("Select an existing warehouse product.");
+      const values = masterValues(req.body);
       m.productId = p.id;
       if (req.body?.updateName) m.productName = p.name;
+      Object.assign(m, values);
       return m;
     });
     res.json(result);
@@ -631,7 +658,7 @@ app.post("/api/product-master", (req, res) => {
       if (duplicate) errors.push("This Marketplace SKU is already mapped for this Company and Marketplace.");
       if (errors.length) throw new Error(errors.join(" "));
 
-      const m = { id: uid("pm"), companyId, marketplace, marketplaceSku: sku, productId: product.id, productName: name, createdAt: new Date().toISOString() };
+      const m = { id: uid("pm"), companyId, marketplace, marketplaceSku: sku, productId: product.id, productName: name, createdAt: new Date().toISOString(), ...masterValues(req.body) };
       db.productMaster.push(m);
       return m;
     });
@@ -672,11 +699,12 @@ app.post("/api/product-master/import", (req, res) => {
         if (m) {
           m.productId = r.productId;
           m.productName = r.name;
+          Object.assign(m, r.values);
           updated++;
         } else {
           db.productMaster.push({
             id: uid("pm"), companyId, marketplace, marketplaceSku: r.sku, productId: r.productId,
-            productName: r.name, createdAt: new Date().toISOString()
+            productName: r.name, createdAt: new Date().toISOString(), ...r.values
           });
           added++;
         }
@@ -731,6 +759,7 @@ app.post("/api/sales", (req, res) => {
       // Scanned labels must never add the same Order ID twice (checks today's sales, history and this batch).
       const seenOrders = new Set([...db.todaySales, ...db.salesHistory].map(x => String(x.orderId || "").trim().toLowerCase()).filter(Boolean));
       for (const row of rows) {
+        const explicitManualDate = (row.source === "manual" || !row.source) && Object.hasOwn(row,"saleDate") ? manualSaleDate(row.saleDate) : null;
         const oid = String(row.orderId || "").trim().toLowerCase();
         if (row.source === "ollama-label" && oid) {
           if (seenOrders.has(oid)) throw new Error(`Order ID ${row.orderId} has already been saved.`);
@@ -750,11 +779,15 @@ app.post("/api/sales", (req, res) => {
         if (saleCompany?.active === false) throw new Error("Company is archived. Select an active company.");
         const mapped = db.productMaster.filter(m => m.companyId === saleAgent?.companyId && m.productId === p.id
           && String(m.marketplace).toLowerCase() === String(account.marketplace).toLowerCase());
+        if (row.source === 'ollama-label' && (!String(row.marketplaceSku || '').trim() || !financialMapping(db.productMaster, {
+          companyId: saleAgent?.companyId, marketplace: account.marketplace, productId: p.id, marketplaceSku: row.marketplaceSku
+        }))) throw new Error(`Not Found: SKU ${String(row.marketplaceSku || '').trim() || '(missing)'} has no unique ${account.marketplace} mapping for this company and PDN. Create or correct the mapping, then retry.`);
 
         const sale = {
           id: uid("sale"),
           batchId,
-          date: row.date || today(),
+          date: explicitManualDate || row.date || today(),
+          ...(explicitManualDate ? {saleDate:explicitManualDate} : {}),
           agentId: row.agentId,
           agentName: saleAgent?.name || "",
           companyId: saleAgent?.companyId || "",
@@ -778,6 +811,7 @@ app.post("/api/sales", (req, res) => {
           createdAt: new Date().toISOString()
         };
 
+        sale.financialSnapshot = captureFinancialSnapshot(financialMapping(db.productMaster, sale), qty, sale.createdAt);
         p.stock -= qty;
         db.todaySales.push(sale);
         db.stockMovements.push({
@@ -802,14 +836,16 @@ app.post("/api/sales", (req, res) => {
 
 // Undo the most recently saved sales batch: sales, warehouse stock, stock movements and the agent SALE cost entries.
 // Payments and unrelated sales are never touched. A batch already archived by Close Day cannot be undone here.
-app.post("/api/sales/undo-last-batch", (_req, res) => {
+app.post("/api/sales/undo-last-batch", (req, res) => {
   try {
     const result = mutate(db => {
       const withBatch = [...db.salesHistory, ...db.todaySales].filter(s => s.batchId);
       if (!withBatch.length) throw new Error(db.salesHistory.length ? "This batch is already archived." : "No saved sales batch to undo.");
       const last = withBatch.reduce((a, b) => String(b.createdAt || "") >= String(a.createdAt || "") ? b : a);
+      if (req.body?.expectedBatchId && req.body.expectedBatchId !== last.batchId) throw new Error("The latest batch changed. Refresh sales before undoing.");
       const batch = db.todaySales.filter(s => s.batchId === last.batchId);
       if (!batch.length || db.salesHistory.some(s => s.batchId === last.batchId)) throw new Error("This batch is already archived.");
+      if (req.body?.selectedDate && batch.some(s => localDay(saleLocalDate(s)) !== req.body.selectedDate)) throw new Error("The latest batch is not entirely on the selected date.");
 
       if (batch.some(sale => db.refunds.some(r => r.saleId === sale.id))) throw new Error("A sale in this batch has been refunded, so the batch cannot be undone.");
       for (const sale of batch) {
@@ -841,6 +877,7 @@ const REFUND_DAYS = 10;
 const pad2 = n => String(n).padStart(2, "0");
 const localDay = d => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 function saleLocalDate(sale) {
+  if (sale.source === "manual" && sale.saleDate) return new Date(sale.saleDate+"T12:00:00");
   const t = Date.parse(sale.createdAt || "");
   return Number.isFinite(t) ? new Date(t) : new Date(`${String(sale.date || "").slice(0, 10)}T12:00:00`);
 }
@@ -854,6 +891,7 @@ app.post("/api/refunds", (req, res) => {
   try {
     const saleId = String(req.body?.saleId || "");
     if (!saleId) throw new Error("Select a sale to refund.");
+    const refundReason=requireRefundReason(req.body?.refundReason);
     const result = mutate(db => {
       const sale = [...db.todaySales, ...db.salesHistory].find(s => s.id === saleId);
       if (!sale) throw new Error("Sale not found.");
@@ -867,11 +905,12 @@ app.post("/api/refunds", (req, res) => {
       const saleAgent = db.agents.find(a => a.id === sale.agentId);
       const saleCompanyId = sale.companyId || saleAgent?.companyId || "";
       const original = db.ledger.find(l => l.type === "SALE" && l.referenceId === sale.id);
-      const costAmount = original ? Number(original.amount || 0) : (typeof sale.costTotal === "number" ? sale.costTotal : 0);
-      const dueReversalAmount = Number(sale.saleAmount || 0);   // what comes off the agent's Sales Due
+      const costAmount = (saleStockCents(sale)??(original?Math.round(Number(original.amount||0)*100):0))/100;
+      const dueReversalAmount = costAmount; // Refund stock cost, never customer selling value.
 
       const refund = {
         id: uid("refund"),
+        refundReason,
         refundedAt: now.toISOString(),
         refundDate: localDay(now),
         saleId: sale.id,
@@ -893,6 +932,7 @@ app.post("/api/refunds", (req, res) => {
         costAmount,          // stock cost of the sale (information only, used for the profit line)
         dueReversalAmount    // full sale amount taken off the agent's Sales Due
       };
+      if (sale.financialSnapshot) refund.financialSnapshot = sale.financialSnapshot;
 
       product.stock += qty;
       db.stockMovements.push({ id: uid("mov"), date: refund.refundDate, productId: product.id, type: "REFUND", qty, agentId: sale.agentId, saleId: sale.id, refundId: refund.id, note: `Refund ${sale.orderId || sale.id}` });
@@ -971,129 +1011,8 @@ app.get("/api/ollama-info", async (_req, res) => {
   res.json({ ...OLLAMA_SETTINGS, status: await ensureOllama() });
 });
 
-app.post("/api/close-day", (_req, res) => {
-  try {
-    const db = readDb();
-    const sales = [...db.todaySales];
-    if (!sales.length) return res.status(400).json({ error: "No daily sales to export." });
-
-    const wb = buildDayWorkbook(db, sales);
-    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-    const fileName = `StockPilot-Daily-${stamp}.xlsx`;
-    const diskPath = path.join(paths.exportDir, fileName);
-    XLSX.writeFile(wb, diskPath);
-
-    mutate(live => {
-      // Move today's sales into the permanent Sales History. A sale already in history is never added twice, and stock is not touched.
-      const archived = new Set(live.salesHistory.map(s => s.id));
-      live.salesHistory.push(...live.todaySales.filter(s => !archived.has(s.id)).map(s => ({ ...s, archivedAt: new Date().toISOString() })));
-      live.todaySales = [];
-    });
-
-    res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
-    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-    fs.createReadStream(diskPath).pipe(res);
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-// ---- Month Close -----------------------------------------------------------------------------------------------
-// Archives the ENTIRE currently active Sales + Wallet period - every sale in todaySales and salesHistory, and every
-// SALE/PAYMENT ledger entry - into one permanent, read-only snapshot, then empties todaySales, salesHistory and
-// those ledger entries so the next month starts fresh. Releasing old Order IDs is a direct side effect of that: the
-// duplicate check in POST /api/sales above only ever looks at todaySales + salesHistory, so once a sale is archived
-// out of both, its Order ID is no longer "already saved" and a label with that same Order ID can be scanned again.
-//
-// Left completely untouched: Product Master, warehouse products/stock, stock movements, refunds (their own
-// collection and their own 10-day logic), companies, agents, accounts, and any SETTLEMENT (Reset Wallet) ledger
-// entries - none of those are SALE or PAYMENT type, so the filter below never touches them.
-//
-// Safety ("archive first, verify, only then reset, or reset nothing"): the snapshot is written to its own file on
-// disk and read back to confirm it matches, BEFORE any active record is touched - all inside the mutate() callback
-// below. mutate() only calls saveDb() if that callback returns normally; if the disk write/verify (or anything else
-// in here) throws, saveDb() never runs, so stockpilot.json is not written at all and every active record is exactly
-// as it was. The on-disk file is a redundant safety copy only - the app reads the archive from monthCloseArchive.
-function writeMonthCloseSnapshotFile(archive) {
-  const dir = path.join(paths.backupDir, "month-close");
-  fs.mkdirSync(dir, { recursive: true });
-  const file = path.join(dir, `${archive.id}.json`);
-  const text = JSON.stringify(archive, null, 2);
-  const temp = `${file}.tmp`;
-  try {
-    fs.writeFileSync(temp, text, "utf8");
-    if (fs.readFileSync(temp, "utf8") !== text) throw new Error("snapshot copy did not verify");
-    fs.renameSync(temp, file);
-  } catch (e) {
-    try { fs.unlinkSync(temp); } catch {}
-    throw new Error(`Month Close snapshot could not be written safely (${e.message}). Nothing was reset.`);
-  }
-  // Independent re-read, the actual verification step, from the final renamed file.
-  const verify = JSON.parse(fs.readFileSync(file, "utf8"));
-  if (verify.sales.length !== archive.sales.length || verify.ledger.length !== archive.ledger.length) {
-    throw new Error("Month Close snapshot failed verification after writing. Nothing was reset.");
-  }
-  return path.relative(paths.root, file).replace(/\\/g, "/");
-}
-
-app.get("/api/month-close", (_req, res) => {
-  const db = readDb();
-  res.json({
-    archives: (db.monthCloseArchive || []).map(a => ({
-      id: a.id, closedAt: a.closedAt, label: a.label || "",
-      salesCount: a.sales.length, ledgerCount: a.ledger.length, agentSummary: a.agentSummary, file: a.file
-    })).reverse() // newest first
-  });
-});
-
-app.post("/api/month-close", (req, res) => {
-  try {
-    const result = mutate(db => {
-      const sales = [...db.todaySales, ...db.salesHistory];
-      if (!sales.length) throw new Error("Nothing to close: there are no active sales.");
-      const ledgerToArchive = db.ledger.filter(l => l.type === "SALE" || l.type === "PAYMENT");
-      const archivedLedgerIds = new Set(ledgerToArchive.map(l => l.id));
-
-      // Per-agent Sales Due / Paid / Balance for this closed period only, computed the SAME way the live wallet
-      // does (SUM of SALE ledger amounts minus SUM of PAYMENT ledger amounts) - so it reconciles with what the
-      // Agent Wallet Details panel showed for these exact entries right before the close. Left unclamped (unlike
-      // the live "never negative" balance) since this is a historical record, not something anyone still owes.
-      const byAgent = new Map();
-      for (const l of ledgerToArchive) {
-        const row = byAgent.get(l.agentId) || { due: 0, paid: 0 };
-        if (l.type === "SALE") row.due += num(l.amount);
-        if (l.type === "PAYMENT") row.paid += num(l.amount);
-        byAgent.set(l.agentId, row);
-      }
-      const agentSummary = [...byAgent.entries()].map(([agentId, v]) => {
-        const agent = db.agents.find(a => a.id === agentId);
-        const company = db.companies.find(c => c.id === agent?.companyId);
-        const due = Math.round(v.due * 100) / 100, paid = Math.round(v.paid * 100) / 100;
-        return { agentId, agentName: agent?.name || "(removed agent)", companyId: agent?.companyId || "", companyName: company?.name || "", due, paid, balance: Math.round((due - paid) * 100) / 100 };
-      }).sort((a, b) => a.agentName.localeCompare(b.agentName));
-
-      const archive = {
-        id: uid("close"),
-        closedAt: new Date().toISOString(),
-        label: String(req.body?.label || "").trim(),
-        sales: sales.map(s => ({ ...s })),
-        ledger: ledgerToArchive.map(l => ({ ...l })),
-        agentSummary
-      };
-      archive.file = writeMonthCloseSnapshotFile(archive); // throws (aborting this whole mutate) if it can't be verified on disk
-
-      (db.monthCloseArchive ||= []).push(archive);
-      db.todaySales = [];
-      db.salesHistory = [];
-      db.ledger = db.ledger.filter(l => !archivedLedgerIds.has(l.id));
-
-      return { id: archive.id, closedAt: archive.closedAt, salesArchived: archive.sales.length, ledgerArchived: archive.ledger.length, agentSummary, file: archive.file };
-    });
-    res.json(result);
-  } catch (e) {
-    res.status(400).json({ error: e.message });
-  }
-});
+// Retired page actions cannot mutate sales through stale clients.
+app.post(['/api/close-day','/api/month-close'],(_req,res)=>res.status(410).json({error:'Close/reset actions were removed. Use Reports / Excel for read-only exports.'}));
 
 // SellQuanta desktop app: serve the built screen (client/dist, made by "npm --prefix client run build") from this same local address,
 // so the desktop window needs no Vite dev server. Only files that exist are served; every /api route above is unchanged.
@@ -1108,6 +1027,8 @@ app.use((err, _req, res, _next) => res.status(500).json({ error: err.message || 
 app.listen(PORT, "127.0.0.1", () => {
   console.log(`StockPilot API running: http://127.0.0.1:${PORT}`);
   ensureOllama().then(s => console.log(`Ollama: ${s.ok ? "ready" : "not reachable yet"}`));
+  // Local scanner verification can restart the API without running data housekeeping.
+  if (process.env.SELLQUANTA_SKIP_STARTUP_WRITES === '1') return;
   autoBackupOncePerDay(); // one backup per local day, taken before anything else touches the data file
   // Start-up housekeeping (idempotent): fills missing accounts / reporting fields. If the data file is unreadable this is skipped
   // and nothing is written, so the app can still tell you what is wrong instead of crashing.

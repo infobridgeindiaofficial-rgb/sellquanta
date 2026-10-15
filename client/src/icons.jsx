@@ -3,6 +3,7 @@ import React from "react";
 // Presentation only: a small local set of outline icons (24px grid, round caps) used by the StockPilot UI.
 // No icon library dependency. Icons are decorative (aria-hidden); buttons that show only an icon carry their own aria-label.
 const P = {
+  bank: <><path d="m3 9 9-6 9 6H3M3 21h18M5 18V12M10 18V12M14 18V12M19 18V12"/></>,
   dashboard: <><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></>,
   scan: <path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2M7 12h10"/>,
   box: <><path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="m3 8 9 5 9-5M12 13v8"/></>,

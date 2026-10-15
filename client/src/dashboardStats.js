@@ -1,3 +1,4 @@
+import {saleStockCents,refundStockCents,stockRecords} from '../../server/stockCost.mjs';
 // Dashboard figures, computed from the real records: Sales History (archived by Close Day) + today's open sales + Refunds.
 // A sale lives in exactly one of the two sales lists, so nothing is counted twice. Pure functions, no DOM.
 //
@@ -10,12 +11,15 @@
 //   2) PERIOD Payments   - not shown on the Dashboard.
 //   3) CUMULATIVE wallet - the permanent ledger balance, shown only on Agents & Wallet.
 export const MARKETPLACES = ["Amazon", "Flipkart", "Meesho"];
+import { dashboardRecords, estimatedFigures } from '../../server/financialSnapshot.mjs';
+import {confirmedPeriodCharges,chargeCompany,adjustProfitEstimate} from './returnChargeProfit.js';
 
 const pad = n => String(n).padStart(2, "0");
 const canonicalMarketplace = v => MARKETPLACES.find(m => m.toLowerCase() === String(v ?? "").trim().toLowerCase()) || String(v ?? "").trim();
 
 // Calendar day of a sale in the user's local time (from its saved timestamp), falling back to the stored date.
 export function saleDay(s) {
+  if (s.source === "manual" && s.saleDate) return s.saleDate;
   const t = Date.parse(s.createdAt || "");
   if (Number.isFinite(t)) { const d = new Date(t); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; }
   return String(s.date || "").slice(0, 10);
@@ -26,6 +30,14 @@ export const localToday = (now = new Date()) => `${now.getFullYear()}-${pad(now.
 // A refund belongs to the local day/month of the refund transaction itself.
 export const refundDay = r => saleDay({ createdAt: r.refundedAt, date: r.refundDate });
 export const refundMonth = r => refundDay(r).slice(0, 7);
+
+// Check if a date string (YYYY-MM-DD) falls within [fromDate, toDate] inclusive.
+// Handles timezone safety: toDate is treated as end-of-day in local time.
+export function inDateRange(day, fromDate, toDate) {
+  if (!fromDate && !toDate) return true;
+  if (!day) return false;
+  return (!fromDate || day >= fromDate) && (!toDate || day <= toDate);
+}
 
 export const monthLabel = ym => {
   const [y, m] = ym.split("-").map(Number);
@@ -62,17 +74,25 @@ const tally = (list, refunds = []) => {
 // /api/refunds). refundCost() is only used for the Dashboard's own inventory profit figure, which nets a refund by
 // its cost instead.
 export function costBasis(state) {
-  const ledgerCost = new Map(state.ledger.filter(l => l.type === "SALE" && l.referenceId).map(l => [l.referenceId, Number(l.amount || 0)]));
-  const costOf = s => ledgerCost.has(s.id) ? ledgerCost.get(s.id) : (typeof s.costTotal === "number" ? s.costTotal : 0);
-  const refundCost = list => list.reduce((t, r) => t + Number(r.costAmount || 0), 0);
-  const refundDue = list => list.reduce((t, r) => t + Number(r.dueReversalAmount ?? r.costAmount ?? 0), 0);
-  return { costOf, refundCost, refundDue };
+  const {saleById}=stockRecords(state);
+  const costOf=s=> (saleStockCents(s)??0)/100;
+  const refundCost=list=>list.reduce((sum,r)=>sum+(refundStockCents(r,saleById)??0)/100,0);
+  const refundDue=refundCost;
+  return {costOf,refundCost,refundDue};
 }
 
-export function dashboardStats(state, month, now = new Date()) {
-  const refunds = state.refunds || [];
-  const inMonth = allSales(state).filter(s => saleMonth(s) === month);
-  const refundsInMonth = refunds.filter(r => refundMonth(r) === month);
+export function dashboardStats(state, options = {}, now = new Date()) {
+  // Support both new options object API and legacy (month, now) API for backward compatibility
+  let month, fromDate, toDate, allTime;
+  if (typeof options === 'string') {
+    month = options;
+  } else {
+    ({ month, fromDate, toDate, allTime } = options);
+  }
+  const { sales, refunds, saleById } = dashboardRecords(state);
+  const useDateRange = fromDate || toDate;
+  const inPeriod = sales.filter(s => allTime || (useDateRange ? inDateRange(saleDay(s), fromDate, toDate) : saleMonth(s) === month));
+  const refundsInPeriod = refunds.filter(r => allTime || (useDateRange ? inDateRange(refundDay(r), fromDate, toDate) : refundMonth(r) === month));
   const agentById = new Map(state.agents.map(a => [a.id, a]));
   const productById = new Map(state.products.map(p => [p.id, p]));
   const companyName = new Map(state.companies.map(c => [c.id, c.name]));
@@ -81,16 +101,28 @@ export function dashboardStats(state, month, now = new Date()) {
 
   const { costOf, refundCost, refundDue } = costBasis(state);
 
-  const totals = tally(inMonth, refundsInMonth);
-  const allCosted = inMonth.length > 0 && inMonth.every(s => typeof s.costTotal === "number");
-  const stockCost = inMonth.reduce((t, s) => t + (typeof s.costTotal === "number" ? s.costTotal : 0), 0) - refundCost(refundsInMonth);
+  const totals = tally(inPeriod, refundsInPeriod);
+  const estimates = estimatedFigures(inPeriod, refundsInPeriod, state, saleById);
+  const periodCharges=confirmedPeriodCharges(state.returnCharges,allTime?{}:{month,fromDate,toDate});
+  estimates.estimated_profit=adjustProfitEstimate(estimates.estimated_profit,periodCharges);
+  const allCosted = inPeriod.length > 0 && inPeriod.every(s => typeof s.costTotal === "number");
+  const stockCost = inPeriod.reduce((t, s) => t + costOf(s), 0) - refundCost(refundsInPeriod);
 
   const companies = state.companies.map(c => {
-    const own = inMonth.filter(s => companyOf(s) === c.id);
-    const ownRefunds = refundsInMonth.filter(r => (r.companyId || agentById.get(r.agentId)?.companyId || "") === c.id);
+    const own = inPeriod.filter(s => companyOf(s) === c.id);
+    const ownRefunds = refundsInPeriod.filter(r => (r.companyId || agentById.get(r.agentId)?.companyId || "") === c.id);
+    const ownCharges=periodCharges.filter(row=>chargeCompany(row,sales,state.agents)===c.id);
+    const ownEstimates=estimatedFigures(own,ownRefunds,state,saleById);
+    ownEstimates.estimated_profit=adjustProfitEstimate(ownEstimates.estimated_profit,ownCharges);
     return {
       id: c.id, name: c.name, ...tally(own, ownRefunds),
-      marketplaces: MARKETPLACES.map(m => ({ marketplace: m, ...tally(own.filter(s => marketOf(s) === m), ownRefunds.filter(r => canonicalMarketplace(r.marketplace) === m)) }))
+      estimates: ownEstimates,
+      marketplaces: MARKETPLACES.map(m => {
+        const list = own.filter(s => marketOf(s) === m), returns = ownRefunds.filter(r => canonicalMarketplace(r.marketplace) === m);
+        const marketEstimates=estimatedFigures(list,returns,state,saleById);
+        marketEstimates.estimated_profit=adjustProfitEstimate(marketEstimates.estimated_profit,ownCharges.filter(row=>canonicalMarketplace(row.marketplace)===m));
+        return { marketplace: m, ...tally(list, returns), estimates: marketEstimates };
+      })
     };
   });
 
@@ -110,28 +142,28 @@ export function dashboardStats(state, month, now = new Date()) {
     });
     return groups.get(key);
   };
-  for (const s of inMonth) {
+  for (const s of inPeriod) {
     const g = groupFor(s.productId, companyOf(s), marketOf(s), { productName: s.productName, code: s.warehouseProductCode || s.sku, company: s.companyName });
     g.qty += Number(s.qty || 0); g.sales += Number(s.saleAmount || 0);
   }
-  for (const r of refundsInMonth) {
+  for (const r of refundsInPeriod) {
     const g = groupFor(r.productId, r.companyId || agentById.get(r.agentId)?.companyId || "", canonicalMarketplace(r.marketplace), { productName: r.productName, code: r.warehouseProductCode, company: r.companyName });
     g.qty -= Number(r.qty || 0); g.sales -= Number(r.refundAmount || 0);
   }
   const topProducts = [...groups.values()].sort((a, b) => b.qty - a.qty || b.sales - a.sales);
 
-  const agentIdsWithActivity = new Set([...inMonth.map(s => s.agentId), ...refundsInMonth.map(r => r.agentId)]);
+  const agentIdsWithActivity = new Set([...inPeriod.map(s => s.agentId), ...refundsInPeriod.map(r => r.agentId)]);
   const agents = state.agents.filter(a => a.active !== false || agentIdsWithActivity.has(a.id)).map(a => {
-    const own = inMonth.filter(s => s.agentId === a.id);
-    const ownRefunds = refundsInMonth.filter(r => r.agentId === a.id);
+    const own = inPeriod.filter(s => s.agentId === a.id);
+    const ownRefunds = refundsInPeriod.filter(r => r.agentId === a.id);
     return { id: a.id, name: a.name, company: companyName.get(a.companyId) || "—", ...tally(own, ownRefunds), salesDue: own.reduce((t, s) => t + costOf(s), 0) - refundDue(ownRefunds) };
   });
 
   const today = localToday(now);
-  const todayTotals = tally(allSales(state).filter(s => saleDay(s) === today), refunds.filter(r => refundDay(r) === today));
+  const todayTotals = tally(sales.filter(s => saleDay(s) === today), refunds.filter(r => refundDay(r) === today));
 
   return {
-    totals, companies, accounts, topProducts, agents, today: todayTotals,
+    totals, estimates, companies, accounts, topProducts, agents, today: todayTotals,
     profit: { available: false, stockCost: allCosted ? stockCost : null, salesMinusStockCost: allCosted ? totals.sales - stockCost : null },
     lowStock: state.products.filter(p => p.active !== false && p.stock <= (p.lowStockLevel ?? 5))
   };
@@ -154,8 +186,9 @@ export function agentWalletBreakdown(state, agentId, reset = null) {
   const saleLedger = new Map((state.ledger || []).filter(l => l.type === "SALE" && l.referenceId).map(l => [l.referenceId, l]));
   const refundLedger = new Map((state.ledger || []).filter(l => l.kind === "REFUND_REVERSAL" && l.refundId).map(l => [l.refundId, l]));
   const afterReset = (entry, at) => !reset || (entry ? !excluded.has(entry.id) : String(at || "") > String(reset.resetAt));
-  const own = allSales(state).filter(s => s.agentId === agentId && afterReset(saleLedger.get(s.id), s.createdAt));
-  const ownRefunds = (state.refunds || []).filter(r => r.agentId === agentId && afterReset(refundLedger.get(r.id), r.refundedAt));
+  const records=dashboardRecords(state);
+  const own = records.sales.filter(s => s.agentId === agentId && afterReset(saleLedger.get(s.id), s.createdAt));
+  const ownRefunds = records.refunds.filter(r => r.agentId === agentId && afterReset(refundLedger.get(r.id), r.refundedAt));
   const refundedSaleIds = new Set(ownRefunds.map(r => r.saleId).filter(Boolean));
   const productById = new Map(state.products.map(p => [p.id, p]));
 
@@ -179,11 +212,11 @@ export function agentWalletBreakdown(state, agentId, reset = null) {
     const g = rowFor(s.productId, s.marketplace, { productName: s.productName, code: s.warehouseProductCode || s.sku });
     const cost = costOf(s);
     g.stockCost += cost; // every sale's cost counts here first; a matching refund below nets its OWN row back out
-    if (!refundedSaleIds.has(s.id)) { g.qty += Number(s.qty || 0); g.unrefundedCost += cost; g.sales += Number(s.saleAmount || 0); }
+    g.qty += Number(s.qty || 0); g.unrefundedCost += cost; g.sales += Number(s.saleAmount || 0);
   }
   for (const r of ownRefunds) {
     const g = rowFor(r.productId, r.marketplace, { productName: r.productName, code: r.warehouseProductCode });
-    g.stockCost -= Number(r.dueReversalAmount ?? r.costAmount ?? 0);
+    const reversal=refundDue([r]);g.stockCost -= reversal;g.unrefundedCost-=reversal;g.qty-=Number(r.qty||0);g.sales-=Number(r.refundAmount||0);
   }
 
   const byProduct = [...rows.values()]

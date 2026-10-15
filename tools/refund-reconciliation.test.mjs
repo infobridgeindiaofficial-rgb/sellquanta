@@ -1,0 +1,10 @@
+﻿import test from 'node:test';import assert from 'node:assert/strict';import {reconcileReturnRows,requireRefundReason} from '../server/refundClassification.mjs';
+const row={id:'r',orderId:'ORDER',marketplace:'Amazon',status:'Confirmed',amountCents:1000,reason:'Explicit fee'};
+const sale={id:'s',orderId:'ORDER',marketplace:'Amazon'};
+test('reconciliation matches Customer Return; no refund, mismatched reason, legacy reason and missing order remain review without writes',()=>{
+ for(const [refunds,status]of [[[{saleId:'s',refundReason:'Customer Return'}],'Matched'],[[],'Sales Found / Return Not Recorded'],[[{saleId:'s',refundReason:'Cancelled'}],'Reason Mismatch'],[[{saleId:'s',refundReason:'RTO'}],'Reason Mismatch'],[[{saleId:'s'}],'Sales Found / Return Not Recorded']]){const state={todaySales:[sale],refunds},before=structuredClone(state);const result=reconcileReturnRows([row],state)[0];assert.equal(result.appMatchStatus,status);assert.equal(result.status,status==='Matched'?'Confirmed':'Needs Review');assert.deepEqual(state,before);}
+ const unknown=reconcileReturnRows([row],{todaySales:[],refunds:[]})[0];assert.equal(unknown.appMatchStatus,'Order Not Found');assert.equal(unknown.salesRecordFound,false);
+ const missing=reconcileReturnRows([row],{refunds:[{orderId:'ORDER',marketplace:'Amazon',refundReason:'Customer Return'}]})[0];assert.equal(missing.status,'Needs Review');assert.match(missing.reason,/Missing Sale/);
+});
+test('reconciliation preserves parser review states and scopes matching by marketplace',()=>{assert.equal(reconcileReturnRows([{...row,status:'Needs Review'}],{todaySales:[sale],refunds:[{saleId:'s',refundReason:'Customer Return'}]})[0].status,'Needs Review');assert.equal(reconcileReturnRows([row],{todaySales:[{...sale,marketplace:'Flipkart'}]})[0].appMatchStatus,'Order Not Found');});
+test('refund reason must be explicit and one of the three supported reasons',()=>{for(const reason of ['Customer Return','Cancelled','RTO'])assert.equal(requireRefundReason(reason),reason);for(const reason of [undefined,'','Refund','customer return'])assert.throws(()=>requireRefundReason(reason));});

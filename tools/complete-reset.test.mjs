@@ -121,10 +121,10 @@ test('expired confirmation and malformed database are rejected without writes',t
 
 test('isolated HTTP reset then entirely new company/product/agent/mapping/sale/report/export works',async t=>{
   const env=environment(t);
-  fs.cpSync(path.join(root,'server'),path.join(env.dir,'server'),{recursive:true});
+  fs.cpSync(path.join(root,'server'),path.join(env.dir,'server'),{recursive:true}); fs.symlinkSync(path.join(root,'node_modules'),path.join(env.dir,'node_modules'),'junction'); fs.cpSync(path.join(root,'client','src'),path.join(env.dir,'client','src'),{recursive:true});
   const listener=net.createServer();await new Promise(r=>listener.listen(0,'127.0.0.1',r));
   const port=listener.address().port;await new Promise(r=>listener.close(r));
-  const child=spawn(process.execPath,[path.join(env.dir,'server/index.mjs')],{env:{...process.env,PORT:String(port)},windowsHide:true,stdio:'ignore'});
+  const child=spawn(process.execPath,[path.join(env.dir,'server/index.mjs')],{env:{...process.env,PORT:String(port)},windowsHide:true,stdio:'inherit'});
   t.after(async()=>{if(child.exitCode===null) await new Promise(r=>{child.once('exit',r);child.kill();});});
   const request=(route,method='GET',body)=>fetch(`http://127.0.0.1:${port}/api${route}`,{method,headers:{'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});
   const ok=async(...args)=>{const r=await request(...args);assert.equal(r.status,200,await r.clone().text());return r.json();};
@@ -154,10 +154,10 @@ test('isolated HTTP reset then entirely new company/product/agent/mapping/sale/r
   for(const route of ['/products/export-backup',`/product-master/export-backup?companyId=${company.id}`,'/product-master/template?companyId='+company.id+'&marketplace=Amazon','/products/import-template']) {
     const r=await request(route);assert.equal(r.status,200);assert(XLSX.read(Buffer.from(await r.arrayBuffer()),{type:'buffer'}).SheetNames.length);
   }
-  assert.deepEqual((await ok('/month-close')).archives,[]);
-  const closeDay=await request('/close-day','POST');assert.equal(closeDay.status,200);await closeDay.arrayBuffer();
-  assert.equal((await ok('/state')).salesHistory.length,1);
-  const month=await ok('/month-close','POST',{});assert.equal(month.salesArchived,1);
-  assert.equal((await ok('/state')).salesHistory.length,0);
+  const report=await request('/reports/sales/export'); assert.equal(report.status,200); assert(XLSX.read(Buffer.from(await report.arrayBuffer()),{type:'buffer'}).SheetNames.includes('Sales Report'));
+  const afterReport=await ok('/state'); assert.equal(afterReport.todaySales.length,1); assert.equal(afterReport.salesHistory.length,0);
   console.log(`Complete reset/fresh-start tested only in ${env.dir}`);
 });
+
+
+

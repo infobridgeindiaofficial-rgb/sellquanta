@@ -1,0 +1,6 @@
+export const sample=()=>({companies:[{id:'c',name:'Glass Works'}],agents:[{id:'a',name:'Asha',companyId:'c'}],products:[{id:'p',name:'Bottle',sku:'WH-P',stock:10,costPrice:40}],productMaster:[],
+ salesHistory:[{id:'s',companyId:'c',agentId:'a',productId:'p',marketplace:'Amazon',marketplaceSku:'P',orderId:'ORDER',date:'2026-09-10',qty:10,saleAmount:1000,costTotal:400,financialSnapshot:{perUnit:{cost_price:40,estimated_profit:20,estimated_settlement:80}}}],todaySales:[],
+ refunds:[{id:'r',saleId:'s',refundDate:'2026-09-12',qty:2,refundAmount:200,refundReason:'Customer Return'},{id:'rto',saleId:'s',refundDate:'2026-09-13',qty:1,refundAmount:100,refundReason:'RTO'},{id:'cancel',saleId:'s',refundDate:'2026-09-14',qty:1,refundAmount:100,refundReason:'Cancelled'}],
+ returnCharges:[{id:'charge',duplicateKey:'fee',status:'Confirmed',marketplace:'Amazon',orderId:'ORDER',sku:'P',date:'2026-09-20',amountCents:5310}],
+ ledger:[{id:'ls',type:'SALE',agentId:'a',referenceId:'s',amount:400},{id:'lr',type:'SALE',kind:'REFUND_REVERSAL',agentId:'a',refundId:'r',amount:-200},{id:'pay',type:'PAYMENT',agentId:'a',amount:100}],walletResets:[],
+ bankSettlements:[{id:'bank',marketplace:'Amazon',date:'2026-09-22',amountCents:20000}],purchases:[{id:'purchase',date:'2026-09-01',totalCents:10000}],monthCloseArchive:[]});

@@ -18,6 +18,7 @@ async function isolated(t, initial) {
   fs.mkdirSync(path.join(root, 'tmp'), { recursive: true });
   const dir = fs.mkdtempSync(path.join(root, 'tmp/wallet-test-'));
   fs.cpSync(path.join(root, 'server'), path.join(dir, 'server'), { recursive: true });
+  fs.cpSync(path.join(root, 'client/src'), path.join(dir, 'client/src'), { recursive: true });
   fs.mkdirSync(path.join(dir, 'data'));
   const file = path.join(dir, 'data/stockpilot.json');
   if (initial) fs.writeFileSync(file, JSON.stringify(initial, null, 2));
@@ -131,14 +132,14 @@ test('reset needs confirmation, gives a ₹0 baseline, deletes nothing, and late
 
 test('multiple resets; a reset clears a hidden negative credit too; refund across the reset baseline', async t => {
   const { app, agent, sell, pay, reset, view } = await setup(t);
-  const s1 = await sell(1, 300);           // due 100
+  const s1 = await sell(1, 300);           // due 100 (stock cost)
   await reset();
   assert.equal((await view()).w.pending, 0);
-  // Refund of a PRE-reset sale after the reset: its reversal (-300, full sale amount - existing rule) is a new event.
-  await app.ok('/refunds', 'POST', { saleId: s1.id });
+  // Refund of a PRE-reset sale after the reset: its reversal (-100, stock cost - existing rule) is a new event.
+  await app.ok('/refunds', 'POST', { saleId: s1.id, refundReason: 'Customer Return' });
   let v = await view();
-  assert.deepEqual(v.w, { due: -300, paid: 0, pending: 0 });
-  await sell(1);                           // +100 -> still absorbed by the refund credit (-200)
+  assert.deepEqual(v.w, { due: -100, paid: 0, pending: 0 });
+  await sell(1);                           // +100 stock cost -> nets to zero
   v = await view();
   assert.equal(v.w.pending, 0);
   await reset();                           // second reset: fresh ₹0 baseline again (negative credit does not carry over)
@@ -152,19 +153,17 @@ test('multiple resets; a reset clears a hidden negative credit too; refund acros
   assert.equal((await app.request('/payments', 'POST', { agentId: agent.id, amount: 1 })).status, 400, 'no payment beyond the current balance');
   // Refund of a POST-reset sale reduces the current wallet as before.
   const s4 = await sell(1, 150);           // +100
-  await app.ok('/refunds', 'POST', { saleId: s4.id });  // -150
+  await app.ok('/refunds', 'POST', { saleId: s4.id, refundReason: 'Customer Return' });  // -150
   v = await view();
   assert.equal(v.s.refunds.length, 2, 'refund history kept');
 });
 
-test('payments stay in history after Month Close archives them; reset state survives a server restart', async t => {
+test('payments stay in history; reset state survives a server restart', async t => {
   const { app, agent, sell, pay, reset, view } = await setup(t);
   await sell(2);
-  await pay(100, 'before month close');
-  await app.ok('/month-close', 'POST', { label: 'Sep' });
+  await pay(100, 'before reset');
   let v = await view();
-  assert.equal(v.s.ledger.filter(l => l.type === 'PAYMENT').length, 0, 'Month Close moves payments into the archive (unchanged)');
-  assert.deepEqual(v.history.map(h => [h.type, h.amount, h.archived]), [['Payment Sent', 100, true]], 'archived payment still visible');
+  assert.equal(v.s.ledger.filter(l => l.type === 'PAYMENT').length, 1, 'payment remains in ledger');
   await reset();
   const saved = app.read();
   assert.equal(saved.walletResets.length, 1, 'reset stored in the data file');

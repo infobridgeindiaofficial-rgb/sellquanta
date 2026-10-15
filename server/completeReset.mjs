@@ -56,7 +56,7 @@ export function createCompleteReset({ paths, emptyDb, io = fs, now = () => new D
         catch { throw failure(`${label} verification failed: invalid JSON. Nothing was reset.`); }
       };
       try {
-        const { bytes } = readOriginal();
+        const { bytes, db } = readOriginal();
         if (hash(bytes) !== prepared.sha256) throw failure("Business data changed after confirmation started. Review it and start again.", 409);
         const stamp = now().toISOString().replace(/[-:]/g, "").replace("T", "-").replace(/\.\d{3}Z$/, "");
         const unique = crypto.randomUUID();
@@ -73,6 +73,8 @@ export function createCompleteReset({ paths, emptyDb, io = fs, now = () => new D
         // A new schema whitelist removes even unknown legacy business fields,
         // correction/undo logs and embedded images. Never spread the old database.
         const database = emptyDb();
+        // Permanent Banking history survives even the explicit business reset.
+        for(const key of ['bankSettlements','bankingAudit','bankingRequests','bankingImportBatches'])if(Array.isArray(db[key]))database[key]=structuredClone(db[key]);
         const clean = Buffer.from(JSON.stringify(database, null, 2), "utf8");
         const resetTemp = `${paths.dbFile}.business-reset-${unique}.tmp`;
         writeDurably(resetTemp, clean);

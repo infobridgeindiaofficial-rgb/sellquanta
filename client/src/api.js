@@ -21,6 +21,15 @@ async function backupDownload(path) {
 }
 
 export const api = {
+  reverseBankReceipt: (id,reason) => json('/banking/receipts/'+encodeURIComponent(id)+'/reverse',{method:'POST',body:JSON.stringify({reason,confirmed:true})}),
+  returnChargeHistory: () => json('/return-charges'),
+  scanReturnCharges: body => json('/return-charges/scan',{method:'POST',body:JSON.stringify(body)}),
+  saveReturnCharges: body => json('/return-charges/import',{method:'POST',body:JSON.stringify(body)}),
+  savePurchase: body => json('/purchases',{method:'POST',body:JSON.stringify(body)}),
+  bankReceiptHistory: () => json('/banking/receipts'),
+  saveManualBankReceipt: body => json('/banking/receipts/manual',{method:'POST',body:JSON.stringify(body)}),
+  saveBankReceipts: body => json('/banking/statement/import', {method:'POST',body:JSON.stringify(body)}),
+  bankStatementPreview: body => json('/banking/statement/preview', { method: 'POST', body: JSON.stringify(body) }),
   prepareBusinessReset: () => json("/business-reset/prepare", { method: "POST", body: "{}" }),
   completeBusinessReset: (token, confirmation) => json("/business-reset", { method: "POST", body: JSON.stringify({ token, confirmation }) }),
   exportWarehouseBackup: () => backupDownload("/products/export-backup"),
@@ -39,7 +48,7 @@ export const api = {
   addProduct: body => json("/products", { method: "POST", body: JSON.stringify(body) }),
   updateProduct: (id, body) => json(`/products/${id}`, { method: "PUT", body: JSON.stringify(body) }),
   removeProduct: id => json(`/products/${id}`, { method: "DELETE" }),
-  updateMasterProduct: (id, productId, updateName) => json(`/product-master/${id}/product`, { method: "POST", body: JSON.stringify({ productId, updateName }) }),
+  updateMasterProduct: (id, productId, updateName, values = {}) => json(`/product-master/${id}/product`, { method: "POST", body: JSON.stringify({ productId, updateName, ...values }) }),
   addMasterProduct: body => json("/product-master", { method: "POST", body: JSON.stringify(body) }),
   removeMasterProduct: id => json(`/product-master/${id}`, { method: "DELETE" }),
   productMasterTemplate: async (companyId, marketplace) => {
@@ -61,23 +70,11 @@ export const api = {
   previewProductImport: fileBase64 => json("/products/import-preview", { method: "POST", body: JSON.stringify({ fileBase64 }) }),
   importProducts: fileBase64 => json("/products/import", { method: "POST", body: JSON.stringify({ fileBase64 }) }),
   adjustStock: body => json("/stock-adjust", { method: "POST", body: JSON.stringify(body) }),
-  refundSale: saleId => json("/refunds", { method: "POST", body: JSON.stringify({ saleId }) }),
-  undoLastBatch: () => json("/sales/undo-last-batch", { method: "POST" }),
+  refundSale: (saleId,refundReason) => json("/refunds", { method: "POST", body: JSON.stringify({ saleId,refundReason }) }),
+  undoLastBatch: (expectedBatchId, selectedDate) => json("/sales/undo-last-batch", { method: "POST", body: JSON.stringify({ expectedBatchId, selectedDate }) }),
   addSales: rows => json("/sales", { method: "POST", body: JSON.stringify(rows) }),
   addPayment: body => json("/payments", { method: "POST", body: JSON.stringify(body) }),
   scanLabel: body => json("/label-scan", { method: "POST", body: JSON.stringify(body) }),
   scanDiagnostics: body => json("/scan-diagnostics", { method: "POST", body: JSON.stringify(body) }),
-  monthCloseList: () => json("/month-close"),
-  monthClose: (label = "") => json("/month-close", { method: "POST", body: JSON.stringify({ label }) }),
-  closeDay: async () => {
-    const r = await fetch(`${API}/close-day`, { method: "POST" });
-    if (!r.ok) {
-      const d = await r.json().catch(() => ({}));
-      throw new Error(d.error || "Close Day failed.");
-    }
-    const blob = await r.blob();
-    const cd = r.headers.get("Content-Disposition") || "";
-    const name = cd.match(/filename="([^"]+)"/)?.[1] || "SellQuanta-Daily.xlsx";
-    return { blob, name };
-  }
+  exportSalesReport: selection => backupDownload('/reports/sales/export?'+new URLSearchParams(selection))
 };

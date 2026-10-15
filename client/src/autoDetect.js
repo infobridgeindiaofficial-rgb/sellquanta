@@ -83,10 +83,18 @@ export function resolveScanRow(row, { companies, agents, accounts, productMaster
   const clueMarketplaces = clues.map(c => c.marketplace);
   const detect = { clues, orderId: row.orderId, sku: row.sku };
   const fail = (status, reason, extra = {}) => ({ status, reason, marketplace: "", company: null, agent: null, account: null, product: null, sku: String(row.sku ?? "").trim(), masterName: "", detect, ...extra });
+  let scopedMaster = productMaster;
+  let identifiedCompany = null;
+  if (row.companyId || row.companyName) {
+    const identified = companies.filter(c => c.active !== false && (row.companyId ? c.id === row.companyId : norm(c.name) === norm(row.companyName)));
+    if (identified.length !== 1) return fail(identified.length ? 'Needs Review' : 'Not Found', `SKU ${String(row.sku || '')}: label company could not be identified uniquely`, { marketplace: clueMarketplaces.length === 1 ? clueMarketplaces[0] : '' });
+    identifiedCompany = identified[0];
+    scopedMaster = productMaster.filter(m => m.companyId === identified[0].id);
+  }
 
   // Which marketplaces to search: the one the label points to; if the label is silent or contradicts itself, let Product Master decide.
   const candidates = clueMarketplaces.length === 1 ? clueMarketplaces : clueMarketplaces.length > 1 ? clueMarketplaces : MARKETPLACES;
-  const results = candidates.map(marketplace => ({ marketplace, ...matchAcrossCompanies(row, marketplace, productMaster, products) }));
+  const results = candidates.map(marketplace => ({ marketplace, ...matchAcrossCompanies(row, marketplace, scopedMaster, products) }));
   const matched = results.filter(x => x.status === "Matched");
   const review = results.filter(x => x.status === "Needs Review");
 
@@ -101,8 +109,8 @@ export function resolveScanRow(row, { companies, agents, accounts, productMaster
   detect.lookupKey = skuKey(row.sku);
   detect.lookupAttempted = true;
   if (pick.status !== "Matched") {
-    const reason = pick.reason || (pick.status === "Not Found" ? notFoundReason(row, clueMarketplaces.length === 1 ? clueMarketplaces[0] : "", productMaster, products, arguments[1]) : "");
-    return fail(pick.status, reason, { marketplace: marketplace || (clueMarketplaces.length === 1 ? clueMarketplaces[0] : ""), detect });
+    const reason = pick.reason || (pick.status === "Not Found" ? notFoundReason(row, clueMarketplaces.length === 1 ? clueMarketplaces[0] : "", scopedMaster, products, { ...arguments[1], allProductMaster: scopedMaster }) : "");
+    return fail(pick.status, reason, { marketplace: marketplace || (clueMarketplaces.length === 1 ? clueMarketplaces[0] : ""), company: identifiedCompany, detect });
   }
   detect.matchedVia = pick.via || "";
 
@@ -110,12 +118,12 @@ export function resolveScanRow(row, { companies, agents, accounts, productMaster
   const company = companies.find(c => c.id === pick.companyId) || null;
   const base = { marketplace, company, product, sku: pick.m.marketplaceSku, masterName: pick.m.productName, detect };
 
-  const candidatesAgents = agents.filter(a => a.companyId === pick.companyId && a.active !== false);
+  const candidatesAgents = agents.filter(a => a.companyId === pick.companyId && a.active !== false && (!row.agentId || a.id === row.agentId));
   if (candidatesAgents.length !== 1) {
     return { ...base, status: "Needs Review", reason: candidatesAgents.length ? "several active agents in this company" : "no active agent in this company", agent: null, account: null };
   }
   const agent = candidatesAgents[0];
-  const account = accounts.find(a => a.agentId === agent.id && norm(a.marketplace) === norm(marketplace)) || null;
+  const account = accounts.find(a => a.agentId === agent.id && norm(a.marketplace) === norm(marketplace) && (!row.accountId || a.id === row.accountId)) || null;
   if (!account) return { ...base, status: "Needs Review", reason: `agent has no ${marketplace} account`, agent, account: null };
 
   return { ...base, status: "Matched", reason: "", agent, account };
