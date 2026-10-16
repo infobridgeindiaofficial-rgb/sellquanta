@@ -17,6 +17,7 @@ async function isolated(t, initial) {
   fs.mkdirSync(path.join(root, 'tmp'), { recursive: true });
   const dir = fs.mkdtempSync(path.join(root, 'tmp/company-test-'));
   fs.cpSync(path.join(root, 'server'), path.join(dir, 'server'), { recursive: true });
+  fs.cpSync(path.join(root, 'client/src'), path.join(dir, 'client/src'), { recursive: true });
   fs.mkdirSync(path.join(dir, 'data'));
   const file = path.join(dir, 'data/stockpilot.json');
   if (initial) fs.writeFileSync(file, JSON.stringify(initial, null, 2));

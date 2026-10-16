@@ -187,7 +187,9 @@ export function readDb() {
     return db;
   }
   try {
-    return normalize(JSON.parse(fs.readFileSync(dbFile, "utf8")));
+    const parsed=JSON.parse(fs.readFileSync(dbFile,"utf8"));
+    if (!parsed || (!Array.isArray(parsed.products) && !Array.isArray(parsed.agents)) || (parsed.products !== undefined && !Array.isArray(parsed.products)) || (parsed.agents !== undefined && !Array.isArray(parsed.agents))) throw Error('Invalid database structure; existing data must be inspected, not reinitialized.');
+    return normalize(parsed);
   } catch (e) {
     // NEVER replace an unreadable file with an empty database (that would silently wipe the business data).
     // Keep a copy for inspection, stop, and let the owner restore from backups/.
@@ -231,7 +233,7 @@ function safeCopyOfLive(target) {
   const temp = `${target}.tmp`;
   try {
     fs.writeFileSync(temp, text, "utf8");
-    if (fs.readFileSync(temp, "utf8") !== text) throw new Error("backup copy did not verify");
+    if (!text.length || fs.readFileSync(temp, "utf8") !== text) throw new Error("backup copy did not verify");
     fs.renameSync(temp, target);
   } catch (e) {
     try { fs.unlinkSync(temp); } catch {}
@@ -267,18 +269,22 @@ export function autoBackupOncePerDay() {
 // Manual backup ("Back Up Now"): a new timestamped file every time, kept until you delete it.
 export function manualBackup() {
   const now = new Date();
-  const name = `stockpilot-manual-${localDay(now).replace(/-/g, "")}-${pad2(now.getHours())}${pad2(now.getMinutes())}${pad2(now.getSeconds())}.json`;
+  const name = `stockpilot-manual-${localDay(now).replace(/-/g, "")}-${pad2(now.getHours())}${pad2(now.getMinutes())}${pad2(now.getSeconds())}-${crypto.randomUUID()}.json`;
   const target = path.join(backupDir, "manual", name);
   const status = safeCopyOfLive(target);
   if (status !== "created") throw new Error("Backup was not created (" + status + ").");
-  return { file: path.relative(root, target).replace(/\\/g, "/") };
+  const bytes = fs.readFileSync(target);
+  if (!bytes.length) throw new Error("Backup verification failed: empty file.");
+  JSON.parse(bytes.toString('utf8'));
+  return { file: path.relative(root, target).replace(/\\/g, "/"), absolutePath: path.resolve(target),
+    bytes: bytes.length, sha256: crypto.createHash('sha256').update(bytes).digest('hex'), verified: true };
 }
 
 export function backupInfo() {
   const daily = fs.readdirSync(backupDir).map(f => DAILY_RE.exec(f)).filter(Boolean).map(m => m[1]).sort().reverse();
   const manualDir = path.join(backupDir, "manual");
   const manual = fs.existsSync(manualDir) ? fs.readdirSync(manualDir).filter(f => f.endsWith(".json")).sort().reverse() : [];
-  return { folder: "backups", keepDays: BACKUP_KEEP_DAYS, dailyCount: daily.length, newestDaily: daily[0] || null, manualCount: manual.length, newestManual: manual[0] || null };
+  return { folder: "backups", absolutePath: backupDir, dataFile: dbFile, keepDays: BACKUP_KEEP_DAYS, dailyCount: daily.length, newestDaily: daily[0] || null, manualCount: manual.length, newestManual: manual[0] || null };
 }
 
 export const paths = { root, dataDir, backupDir, exportDir, dbFile };

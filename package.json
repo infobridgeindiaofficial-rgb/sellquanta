@@ -1,6 +1,6 @@
 {
   "name": "stockpilot-fresh",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "SellQuanta - local e-commerce operations and warehouse manager",
   "author": "SellQuanta",
   "license": "MIT",
@@ -50,7 +50,14 @@
       "client/dist/**/*",
       "tools/SellQuanta.ico",
       "!**/*.test.*",
-      "!**/*.map"
+      "!**/*.map",
+      "client/src/dashboardStats.js",
+      "client/src/masterChartCompatibility.js",
+      "client/src/masterChartData.js",
+      "client/src/masterChartPivot.js",
+      "client/src/returnChargeProfit.js",
+      "client/src/wallet.js",
+      "client/src/returnChargeTotals.js"
     ],
     "win": {
       "target": [

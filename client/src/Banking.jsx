@@ -1,5 +1,6 @@
 import React,{useEffect,useRef,useState} from 'react';
 import {api} from './api';
+import StatementScanner from './StatementScanner.jsx';
 
 const today=()=>new Date().toISOString().slice(0,10);
 const requestId=()=>crypto.randomUUID();
@@ -27,6 +28,7 @@ export default function Banking({notify,Card,Stat,Mkt,DownloadButton}){
  });
  const exportExcel=async()=>{const {blob,name}=await api.exportBanking(filter),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
  return <>
+ <StatementScanner onSaved={async()=>{refresh();}}/>
  <Card className="flush"><div className="ph"><div><h3>Banking &amp; Marketplace Reconciliation</h3><p className="hint">Compare recorded sales with actual bank receipts. Banking entries are separate from sales and agent wallets.</p></div><DownloadButton label="Export Excel" action={exportExcel} disabled={!report||loading||busy}/></div>
  <div className="report-filters"><label>Period<select aria-label="Banking period" disabled={busy} value={filter.mode} onChange={e=>change('mode',e.target.value)}>{[['all','All Time'],['daily','Daily'],['weekly','Weekly'],['monthly','Monthly'],['custom','Custom Date Range']].map(([v,t])=><option key={v} value={v}>{t}</option>)}</select></label>
  {['daily','weekly'].includes(filter.mode)&&<label>{filter.mode==='weekly'?'Date in week':'Date'}<input aria-label="Banking date" type="date" value={filter.date} onChange={e=>change('date',e.target.value)}/></label>}

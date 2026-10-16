@@ -1,3 +1,9 @@
+import {MASTER_VALUE_FIELDS,masterValues} from './masterValues.mjs';
+import {registerReturnChargeRoutes,createReturnChargePersistence} from './returnChargeRoutes.mjs';
+import {registerStatementRoutes} from './statementAdapter.mjs';
+import {registerMasterChartRoutes} from './masterChartExport.mjs';
+import {manualSaleDate} from './manualSaleDate.mjs';
+import {financialMapping,captureFinancialSnapshot} from './financialSnapshot.mjs';
 import { inspectLocalAi, startLocalAi, confirmLocalAiRequest } from './localAi.mjs';
 import { createBankingRouter } from './bankingRoutes.mjs';
 import { writeBrandedWorkbook, importHeaderRow } from './excelStyle.mjs';
@@ -7,7 +13,7 @@ import cors from "cors";
 import fs from "node:fs";
 import path from "node:path";
 import XLSX from "xlsx";
-import { readDb, mutate, uid, paths, emptyDb, ensureAccounts, dedupeAgents, migrateSaleCosts, assignLegacyBatches, backfillSaleHistory, autoBackupOncePerDay, manualBackup, backupInfo } from "./store.mjs";
+import { readDb, saveDb, mutate, uid, paths, emptyDb, ensureAccounts, dedupeAgents, migrateSaleCosts, assignLegacyBatches, backfillSaleHistory, autoBackupOncePerDay, manualBackup, backupInfo } from "./store.mjs";
 import { ensureOllama, scanLabel, OLLAMA_SETTINGS } from "./ollama.mjs";
 import { buildReportsWorkbook } from "./reportExcel.mjs";
 import { buildWarehouseBackup, buildCompanyMasterBackup, companyBackupFilename, backupDate } from "./backupExports.mjs";
@@ -19,6 +25,7 @@ const PORT = Number(process.env.PORT || 8787);
 
 app.use(cors());
 app.use(express.json({ limit: "35mb" }));
+registerMasterChartRoutes(app,{readDb});
 
 const today = () => new Date().toISOString().slice(0, 10);
 const num = v => Number(v || 0);
@@ -74,6 +81,18 @@ app.post("/api/backup", (_req, res) => {
   try { res.json({ ok: true, ...manualBackup() }); }
   catch (e) { res.status(500).json({ error: e.message }); }
 });
+// Only previously created manual backups can be downloaded; never accept an arbitrary path.
+app.get('/api/backup/manual/:name', (req,res) => {
+  const name = req.params.name;
+  if (!/^stockpilot-manual-\d{8}-\d{6}(?:-[a-f0-9-]{36})?\.json$/.test(name)) return res.status(400).json({error:'Invalid backup filename.'});
+  const file = path.join(paths.backupDir,'manual',name);
+  try {
+    const bytes=fs.readFileSync(file),data=JSON.parse(bytes.toString('utf8'));
+    if(!bytes.length||!Array.isArray(data.products)||!Array.isArray(data.agents)) throw Error('Backup verification failed.');
+    res.setHeader('Content-Disposition',`attachment; filename="${name}"`);
+    res.type('application/json').send(bytes);
+  } catch(e) { res.status(e.code==='ENOENT'?404:500).json({error:e.code==='ENOENT'?'Backup file not found.':e.message}); }
+});
 app.get("/api/backup-info", (_req, res) => {
   try { res.json(backupInfo()); }
   catch (e) { res.status(500).json({ error: e.message }); }
@@ -81,6 +100,8 @@ app.get("/api/backup-info", (_req, res) => {
 
 app.use("/api/purchases", createPurchaseRouter());
 app.use("/api/banking", createBankingRouter());
+registerStatementRoutes(app,{readDb,saveDb});
+registerReturnChargeRoutes(app,{readDb,persist:createReturnChargePersistence(paths)});
 app.get('/api/ollama/status', async (_req,res) => {try{res.json(await inspectLocalAi({url:process.env.OLLAMA_URL||OLLAMA_SETTINGS.url,model:OLLAMA_SETTINGS.model}));}catch(e){res.status(400).json({error:e.message});}});
 app.post('/api/ollama/start', async (req,res) => {
  try{confirmLocalAiRequest(req.headers.origin,PORT,process.env.SELLQUANTA_DEV_UI_ORIGIN);}catch(e){return res.status(403).json({error:e.message});}
@@ -526,7 +547,8 @@ app.post("/api/products/import", (req, res) => {
 
 // ---- Product Master: Company + Marketplace SKU -> Warehouse product ----
 const MARKETPLACES = ["Amazon", "Flipkart", "Meesho"];
-const MASTER_COLUMNS = ["warehouse_product_code", "marketplace_sku", "product_name"];
+const MASTER_REQUIRED_COLUMNS = ["warehouse_product_code", "marketplace_sku", "product_name"];
+const MASTER_COLUMNS = [...MASTER_REQUIRED_COLUMNS,...MASTER_VALUE_FIELDS.map(([field])=>field)];
 
 function masterScope(db, companyId, marketplace) {
   const company = requireActiveCompany(db, companyId);
@@ -542,7 +564,7 @@ function parseProductMasterSheet(db, companyId, marketplace, fileBase64) {
   if (!sheet) throw new Error('Sheet named "PRODUCT_MASTER" was not found in the Excel file.');
 
   const found = (XLSX.utils.sheet_to_json(sheet, { range: importHeaderRow(sheet), header: 1 })[0] || []).map(h => String(h).trim());
-  const missing = MASTER_COLUMNS.filter(h => !found.includes(h));
+  const missing = MASTER_REQUIRED_COLUMNS.filter(h => !found.includes(h));
   if (missing.length) throw new Error(`Missing column(s): ${missing.join(", ")}`);
 
   const raw = XLSX.utils.sheet_to_json(sheet, { range: importHeaderRow(sheet), defval: "", blankrows: true });
@@ -558,6 +580,8 @@ function parseProductMasterSheet(db, companyId, marketplace, fileBase64) {
     const sku = String(r.marketplace_sku ?? "").trim();
     const name = String(r.product_name ?? "").trim();
     const errors = [];
+    let values={};try{values=masterValues(r,{preserveBlanks:true});}catch(e){errors.push(e.message);}
+    for(const [field] of MASTER_VALUE_FIELDS){const col=found.indexOf(field);if(col>=0&&sheet[XLSX.utils.encode_cell({r:i+1+importHeaderRow(sheet),c:col})]?.f)errors.push(`${field} must contain a manual value, not a formula.`);}
     if (!code) errors.push("warehouse_product_code required");
     if (!sku) errors.push("marketplace_sku required");
     if (!name) errors.push("product_name required");
@@ -566,7 +590,7 @@ function parseProductMasterSheet(db, companyId, marketplace, fileBase64) {
     if (sku && seen.has(sku.toLowerCase())) errors.push("duplicate marketplace_sku in file");
     if (sku) seen.add(sku.toLowerCase());
     rows.push({
-      row: i + 2 + importHeaderRow(sheet), code, sku, name,
+      row: i + 2 + importHeaderRow(sheet), code, sku, name, values,
       productId: byCode.get(code.toLowerCase())?.id || "",
       status: errors.length ? "Error" : existing.has(sku.toLowerCase()) ? "Existing" : "New",
       error: errors.join("; ")
@@ -608,7 +632,9 @@ app.post("/api/product-master/:id/product", (req, res) => {
       requireActiveCompany(db, m.companyId);
       const p = db.products.find(x => x.id === String(req.body?.productId || ""));
       if (!p || !isActive(p)) throw new Error("Select an existing warehouse product.");
+      const values=masterValues(req.body);
       m.productId = p.id;
+      Object.assign(m,values);
       if (req.body?.updateName) m.productName = p.name;
       return m;
     });
@@ -644,7 +670,7 @@ app.post("/api/product-master", (req, res) => {
       if (duplicate) errors.push("This Marketplace SKU is already mapped for this Company and Marketplace.");
       if (errors.length) throw new Error(errors.join(" "));
 
-      const m = { id: uid("pm"), companyId, marketplace, marketplaceSku: sku, productId: product.id, productName: name, createdAt: new Date().toISOString() };
+      const m = { id: uid("pm"), companyId, marketplace, marketplaceSku: sku, productId: product.id, productName: name, createdAt: new Date().toISOString(), ...masterValues(req.body) };
       db.productMaster.push(m);
       return m;
     });
@@ -685,11 +711,12 @@ app.post("/api/product-master/import", (req, res) => {
         if (m) {
           m.productId = r.productId;
           m.productName = r.name;
+          Object.assign(m,r.values);
           updated++;
         } else {
           db.productMaster.push({
             id: uid("pm"), companyId, marketplace, marketplaceSku: r.sku, productId: r.productId,
-            productName: r.name, createdAt: new Date().toISOString()
+            productName: r.name, ...r.values, createdAt: new Date().toISOString()
           });
           added++;
         }
@@ -744,6 +771,7 @@ app.post("/api/sales", (req, res) => {
       // Scanned labels must never add the same Order ID twice (checks today's sales, history and this batch).
       const seenOrders = new Set([...db.todaySales, ...db.salesHistory].map(x => String(x.orderId || "").trim().toLowerCase()).filter(Boolean));
       for (const row of rows) {
+        const explicitManualDate=(row.source==="manual"||!row.source)&&Object.hasOwn(row,"saleDate")?manualSaleDate(row.saleDate):null;
         const oid = String(row.orderId || "").trim().toLowerCase();
         if (row.source === "ollama-label" && oid) {
           if (seenOrders.has(oid)) throw new Error(`Order ID ${row.orderId} has already been saved.`);
@@ -767,7 +795,8 @@ app.post("/api/sales", (req, res) => {
         const sale = {
           id: uid("sale"),
           batchId,
-          date: row.date || today(),
+          date: explicitManualDate || row.date || today(),
+          ...(explicitManualDate?{saleDate:explicitManualDate}:{}),
           agentId: row.agentId,
           agentName: saleAgent?.name || "",
           companyId: saleAgent?.companyId || "",
@@ -791,6 +820,8 @@ app.post("/api/sales", (req, res) => {
           createdAt: new Date().toISOString()
         };
 
+        // Metadata only: retain the released stock, ledger and report formulas.
+        sale.financialSnapshot=captureFinancialSnapshot(financialMapping(db.productMaster,sale),qty,sale.createdAt);
         p.stock -= qty;
         db.todaySales.push(sale);
         db.stockMovements.push({
@@ -854,6 +885,7 @@ const REFUND_DAYS = 10;
 const pad2 = n => String(n).padStart(2, "0");
 const localDay = d => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 function saleLocalDate(sale) {
+  if(sale.source==="manual"&&sale.saleDate)return new Date(sale.saleDate+"T12:00:00");
   const t = Date.parse(sale.createdAt || "");
   return Number.isFinite(t) ? new Date(t) : new Date(`${String(sale.date || "").slice(0, 10)}T12:00:00`);
 }
@@ -1009,6 +1041,7 @@ app.use((err, _req, res, _next) => res.status(500).json({ error: err.message || 
 app.listen(PORT, "127.0.0.1", () => {
   console.log(`StockPilot API running: http://127.0.0.1:${PORT}`);
   ensureOllama().then(s => console.log(`Ollama: ${s.ok ? "ready" : "not reachable yet"}`));
+  if(process.env.SELLQUANTA_SKIP_STARTUP_WRITES==='1')return; // Isolated runtime checks never run housekeeping.
   autoBackupOncePerDay(); // one backup per local day, taken before anything else touches the data file
   // Start-up housekeeping (idempotent): fills missing accounts / reporting fields. If the data file is unreadable this is skipped
   // and nothing is written, so the app can still tell you what is wrong instead of crashing.

@@ -1,7 +1,8 @@
 import XLSX from "xlsx";
+import {MASTER_VALUE_FIELDS} from "./masterValues.mjs";
 
 const warehouseColumns = ["Warehouse Product Code", "Product Name", "Cost Price", "Opening Stock", "Current Stock", "Low Stock Level", "Status", "Product ID", "Created At", "Updated At", "Archived At", "Has Product Image"];
-const masterColumns = ["Warehouse Product Code", "Marketplace SKU", "Product Name", "Mapping ID", "Warehouse Product ID", "Company ID", "Company Name", "Marketplace", "Created At"];
+const masterColumns = ["Warehouse Product Code", "Marketplace SKU", "Product Name", ...MASTER_VALUE_FIELDS.map(([field])=>field), "Mapping ID", "Warehouse Product ID", "Company ID", "Company Name", "Marketplace", "Created At"];
 
 function sheet(columns, rows) {
   // Explicit headers keep empty exports usable. Strings stay strings (including
@@ -37,7 +38,7 @@ export function buildCompanyMasterBackup(db, companyId) {
   for (const marketplace of ["AMAZON", "FLIPKART", "MEESHO"]) {
     const rows = own.filter(m => String(m.marketplace).trim().toUpperCase() === marketplace).map(m => [
       products.get(m.productId)?.sku ?? "", m.marketplaceSku ?? "", m.productName ?? "",
-      m.id ?? "", m.productId ?? "", company.id, company.name, m.marketplace ?? "", m.createdAt ?? ""
+      ...MASTER_VALUE_FIELDS.map(([field])=>m[field]??""), m.id ?? "", m.productId ?? "", company.id, company.name, m.marketplace ?? "", m.createdAt ?? ""
     ]);
     XLSX.utils.book_append_sheet(wb, sheet(masterColumns, rows), marketplace);
   }

@@ -10,6 +10,7 @@ const compiled=fs.mkdtempSync(path.join(project,'tmp/download-feedback-'));
 for(const file of fs.readdirSync(path.join(project,'client/src')).filter(f=>/\.(jsx|js)$/.test(f) && !f.endsWith('.test.js'))) {
   let code=fs.readFileSync(path.join(project,'client/src',file),'utf8');
   if(file==='api.js') code='export const api=globalThis.__exportApi;';
+  if(file==='bankStatementFile.js') code='export const statementInput=(...args)=>globalThis.__statementInput(...args);';
   if(file==='pdf.js') code='export const fileToPdfPages=()=>{}; export const fileToImageDataUrls=()=>{};';
   if(file==='App.jsx') code+='\nexport {Warehouse,ProductMaster,ReportsPage};';
   code=code.replace(/from (["'])\.\/([^"']+)\1/g,(_,q,name)=>`from ${q}./${name.replace(/\.(js|jsx)$/,'')}.mjs${q}`)

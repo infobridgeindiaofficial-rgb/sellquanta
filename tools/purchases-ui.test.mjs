@@ -16,6 +16,7 @@ const compiled=mkdtempSync(join(project,'tmp','purchases-ui-'));
 for(const file of readdirSync(join(project,'client/src')).filter(f=>/\.(jsx|js)$/.test(f) && !f.endsWith('.test.js'))) {
   let code=readFileSync(join(project,'client/src',file),'utf8');
   if(file==='api.js') code='export const api = globalThis.__salesTest.api;';
+  if(file==='bankStatementFile.js') code='export const statementInput=(...args)=>globalThis.__statementInput(...args);';
   if(file==='pdf.js') code='export const fileToPdfPages = (...args)=>globalThis.__salesTest.pdf(...args); export const fileToImageDataUrls=()=>{throw Error("unexpected image fallback")};';
   if(file==='App.jsx') code+='\nexport {ReportsPage};';
   code=code.replace(/from (["'])\.\/([^"']+)\1/g,(_,q,name)=>`from ${q}./${name.replace(/\.(js|jsx)$/,'')}.mjs${q}`)

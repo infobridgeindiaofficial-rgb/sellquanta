@@ -16,6 +16,7 @@ const compiled=mkdtempSync(join(project,'tmp','wallet-period-ui-'));
 for(const file of readdirSync(join(project,'client/src')).filter(f=>/\.(jsx|js)$/.test(f) && !f.endsWith('.test.js'))) {
   let code=readFileSync(join(project,'client/src',file),'utf8');
   if(file==='api.js') code='export const api = globalThis.__salesTest.api;';
+  if(file==='bankStatementFile.js') code='export const statementInput=(...args)=>globalThis.__statementInput(...args);';
   if(file==='pdf.js') code='export const fileToPdfPages = (...args)=>globalThis.__salesTest.pdf(...args); export const fileToImageDataUrls=()=>{throw Error("unexpected image fallback")};';
   if(file==='App.jsx') code+='\nexport {Agents};';
   code=code.replace(/from (["'])\.\/([^"']+)\1/g,(_,q,name)=>`from ${q}./${name.replace(/\.(js|jsx)$/,'')}.mjs${q}`)
@@ -46,7 +47,7 @@ test('real wallet details: All Time default, monthly/custom controls, read-only 
  await change('Wallet period','custom');assert.ok(document.querySelector('[role="alert"]'));
  await change('Wallet from date','2026-10-02');await change('Wallet to date','2026-10-31');assert.equal(document.querySelector('[role="alert"]'),null);
  assert.ok(document.body.textContent.includes('No transactions for this period.'));
- assert.equal(table.innerHTML,tableBefore);assert.ok([...document.querySelectorAll('button')].some(b=>b.textContent.includes('Reset Wallet')));
+ assert.equal(table.innerHTML,tableBefore);assert.ok(![...document.querySelectorAll('button')].some(b=>b.textContent.includes('Reset Wallet')));
  await change('Wallet period','all');assert.equal(document.querySelector('[aria-label="Wallet from date"]'),null);
  assert.equal(JSON.stringify(state),before);assert.equal(mutationCalls,0);
  }finally{await act(async()=>root.unmount());}

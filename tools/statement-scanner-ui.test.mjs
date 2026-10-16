@@ -1,0 +1,18 @@
+import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import path from 'node:path';import {pathToFileURL} from 'node:url';import {JSDOM} from 'jsdom';import {transform} from '../client/node_modules/esbuild/lib/main.js';
+const root=path.resolve(import.meta.dirname,'..'),compiled=fs.mkdtempSync(path.join(root,'tmp/statement-ui-'));
+let source=fs.readFileSync(path.join(root,'client/src/StatementScanner.jsx'),'utf8').replace("import {api} from './api';",'const api=globalThis.__statementApi;').replace("from 'react'",`from '${pathToFileURL(path.join(root,'client/node_modules/react/index.js')).href}'`);
+fs.writeFileSync(path.join(compiled,'scanner.mjs'),(await transform(source,{loader:'jsx',format:'esm'})).code);
+const dom=new JSDOM('<div id="root"></div>');globalThis.window=dom.window;globalThis.document=dom.window.document;globalThis.HTMLElement=dom.window.HTMLElement;globalThis.IS_REACT_ACT_ENVIRONMENT=true;
+globalThis.__statementApi={};
+const React=await import('../client/node_modules/react/index.js'),{createRoot}=await import('../client/node_modules/react-dom/client.js'),{default:Scanner}=await import(pathToFileURL(path.join(compiled,'scanner.mjs')));
+const button=text=>[...document.querySelectorAll('button')].find(b=>b.textContent===text);
+const click=async el=>{assert.ok(el);await React.act(async()=>el.click());};
+test('statement UI never saves on scan; debit/excluded/duplicate rows remain blocked; explicit confirmation and double-click protection precede released-ledger import',async t=>{
+ let saves=0,refresh=0;const rows=[{id:'credit',date:'2026-10-01',narration:'Amazon',reference:'UTR',creditCents:10000,debitCents:0,detection:{status:'Confirmed',marketplace:'Amazon'}},{id:'debit',creditCents:0,debitCents:100,detection:{status:'Other / Excluded'}},{id:'duplicate',creditCents:100,debitCents:0,duplicate:'Already recorded',detection:{status:'Confirmed',marketplace:'Amazon'}}];
+ Object.assign(globalThis.__statementApi,{statementPreview:async input=>{assert.equal(input.useOllama,false);return {scanToken:'token',savingEnabled:true,rows};},statementImport:async payload=>{saves++;assert.equal(payload.confirm,true);assert.equal(payload.verificationComplete,true);assert.equal(payload.selections.length,1);assert.equal(payload.selections[0].rowId,'credit');assert.equal(payload.selections[0].marketplace,'Amazon');await new Promise(r=>setTimeout(r,15));return {saved:1,duplicates:0};}});
+ const view=createRoot(document.getElementById('root'));t.after(async()=>React.act(async()=>view.unmount()));await React.act(async()=>view.render(React.createElement(Scanner,{readInput:async()=>({filename:'synthetic.csv',base64:'test'}),onSaved:async()=>refresh++})));
+ const input=document.querySelector('input[type=file]');await React.act(async()=>{Object.defineProperty(input,'files',{value:[new dom.window.File(['test'],'synthetic.csv')]});input.dispatchEvent(new dom.window.Event('change',{bubbles:true}));});
+ await click(button('Scan Statement'));assert.equal(saves,0);assert.equal(button('Confirm & Save Receipts').disabled,true);assert.equal(document.querySelector('[aria-label="Approve debit"]').disabled,true);assert.equal(document.querySelector('[aria-label="Approve duplicate"]').disabled,true);
+ await click(document.querySelector('[aria-label="Approve credit"]'));assert.equal(button('Confirm & Save Receipts').disabled,true);await click(document.querySelector('[aria-label="Verify statement"]'));
+ await React.act(async()=>{button('Confirm & Save Receipts').click();button('Confirm & Save Receipts').click();await new Promise(r=>setTimeout(r,30));});assert.equal(saves,1);assert.equal(refresh,1);assert.match(document.body.textContent,/Saved 1 receipt/);
+});

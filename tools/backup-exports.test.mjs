@@ -106,6 +106,7 @@ test('download endpoints return valid XLSX and company filenames without any dat
   const original=fs.readFileSync(livePath);
   const dir=fs.mkdtempSync(path.join(root,'tmp/export-http-test-'));
   fs.cpSync(path.join(root,'server'),path.join(dir,'server'),{recursive:true});
+  fs.cpSync(path.join(root,'client/src'),path.join(dir,'client/src'),{recursive:true});
   fs.mkdirSync(path.join(dir,'data'));
   const dbPath=path.join(dir,'data/stockpilot.json');
   fs.writeFileSync(dbPath,original);

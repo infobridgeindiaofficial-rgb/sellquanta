@@ -122,6 +122,7 @@ test('expired confirmation and malformed database are rejected without writes',t
 test('isolated HTTP reset then entirely new company/product/agent/mapping/sale/report/export works',async t=>{
   const env=environment(t);
   fs.cpSync(path.join(root,'server'),path.join(env.dir,'server'),{recursive:true});
+  fs.cpSync(path.join(root,'client/src'),path.join(env.dir,'client/src'),{recursive:true});
   const listener=net.createServer();await new Promise(r=>listener.listen(0,'127.0.0.1',r));
   const port=listener.address().port;await new Promise(r=>listener.close(r));
   const child=spawn(process.execPath,[path.join(env.dir,'server/index.mjs')],{env:{...process.env,PORT:String(port)},windowsHide:true,stdio:'ignore'});

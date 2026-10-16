@@ -50,6 +50,7 @@ export function applySettlement(db,action,id,body,now=new Date()){
  if(!['create','update','delete'].includes(action))fail('Unknown settlement action.');
  const current=active(db).find(s=>s.id===id);
  if(action!=='create'&&!current)fail('Settlement not found or already deleted.',404);
+ if(current&&(current.kind==='receipt_reversal'||(db.bankSettlements||[]).some(r=>r.kind==='receipt_reversal'&&r.originalReceiptId===current.id)))fail('This legacy reversal pair must be reconciled together; individual corrections would double-count the reversal.',409);
  if(current&&body.version!==current.version)fail('This settlement changed. Reload history before correcting it.',409);
  if(value)duplicate(db,value,id);
  const at=now.toISOString();const before=current?{...current}:null;

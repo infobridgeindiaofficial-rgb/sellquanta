@@ -13,6 +13,7 @@ const compiled=fs.mkdtempSync(path.join(project,'tmp/reset-ui-'));
 for(const file of fs.readdirSync(path.join(project,'client/src')).filter(f=>/\.(jsx|js)$/.test(f)&&!f.endsWith('.test.js'))) {
   let code=fs.readFileSync(path.join(project,'client/src',file),'utf8');
   if(file==='api.js') code='export const api=globalThis.__resetTestApi;';
+  if(file==='bankStatementFile.js') code='export const statementInput=(...args)=>globalThis.__statementInput(...args);';
   if(file==='pdf.js') code='export const fileToPdfPages=()=>{};export const fileToImageDataUrls=()=>{};';
   code=code.replace(/from (["'])\.\/([^"']+)\1/g,(_,q,name)=>`from ${q}./${name.replace(/\.(js|jsx)$/,'')}.mjs${q}`)
     .replace(/from (["'])react\1/g,`from '${pathToFileURL(path.join(project,'client/node_modules/react/index.js')).href}'`);
@@ -97,13 +98,13 @@ test('App discards late old-business reads and clears only its business preferen
   let stateCalls=0,lateRead;
   Object.assign(globalThis.__resetTestApi,{
     state:()=>{stateCalls++;return stateCalls===1?Promise.resolve(old):stateCalls===2?new Promise(r=>lateRead=r):Promise.resolve(empty());},
-    health:async()=>({ollama:{ok:true}}),prepareBusinessReset:async()=>({token:'once',counts:{companies:1}}),
+    health:async()=>({ollama:{ok:true}}),localAiStatus:async()=>({installed:false,running:false,recommendation:{}}),prepareBusinessReset:async()=>({token:'once',counts:{companies:1}}),
     completeBusinessReset:async()=>({state:empty(),backup:'backups/business-reset/test.json'})
   });
   localStorage.setItem('sp_master_company','old-id');localStorage.setItem('sp_master_marketplace','Amazon');localStorage.setItem('unrelated','keep');
   window.sessionStorage.setItem('sp_master_company','old-id');
   await mount(t,React.createElement(React.StrictMode,null,React.createElement(App)));
-  await waitFor(()=>button('Agents & Wallet'));await click(button('Agents & Wallet'));
+  await waitFor(()=>button('Settings'));await click(button('Settings'));await click(button('Open Business Setup'));
   await stages();await change(field('Type RESET'),'RESET');await click(button('Reset Everything & Start New Business'));
   await waitFor(()=>document.body.textContent.includes('Add your first company'));
   await act(async()=>lateRead(old));
@@ -117,6 +118,7 @@ test('real App/API on copied business: reset, fresh company in Product Master, n
   const livePath=path.join(fixtureRoot,'data/stockpilot.json'),before=fs.readFileSync(livePath);
   const dir=fs.mkdtempSync(path.join(project,'tmp/reset-ui-server-'));
   fs.cpSync(path.join(project,'server'),path.join(dir,'server'),{recursive:true});
+  fs.cpSync(path.join(project,'client/src'),path.join(dir,'client/src'),{recursive:true});
   for(const name of ['data','exports','backups/month-close']) if(fs.existsSync(path.join(fixtureRoot,name))) fs.cpSync(path.join(fixtureRoot,name),path.join(dir,name),{recursive:true});
   const listener=net.createServer();await new Promise(r=>listener.listen(0,'127.0.0.1',r));const port=listener.address().port;await new Promise(r=>listener.close(r));
   const child=spawn(process.execPath,[path.join(dir,'server/index.mjs')],{env:{...process.env,PORT:String(port)},windowsHide:true,stdio:'ignore'});
@@ -125,8 +127,8 @@ test('real App/API on copied business: reset, fresh company in Product Master, n
   const apiFile=path.join(compiled,'real-api.mjs');
   fs.writeFileSync(apiFile,fs.readFileSync(path.join(project,'client/src/api.js'),'utf8').replace('http://127.0.0.1:8787/api',`http://127.0.0.1:${port}/api`));
   const {api}=await import(pathToFileURL(apiFile));Object.assign(globalThis.__resetTestApi,api);
-  await mount(t,React.createElement(App));await waitFor(()=>button('Agents & Wallet'));
-  await click(button('Agents & Wallet'));await stages();await change(field('Type RESET'),'RESET');
+  await mount(t,React.createElement(App));await waitFor(()=>button('Settings'));
+  await click(button('Settings'));await click(button('Open Business Setup'));await stages();await change(field('Type RESET'),'RESET');
   const originalCopy=fs.readFileSync(path.join(dir,'data/stockpilot.json'));
   await click(button('Reset Everything & Start New Business'));
   await waitFor(()=>document.body.textContent.includes('Add your first company'));
@@ -145,7 +147,7 @@ test('real App/API on copied business: reset, fresh company in Product Master, n
   assert(document.querySelector('[aria-label="Search warehouse products"]'));
   // Seed only the isolated test server through the retained API; Warehouse is read-only.
   await api.addProduct({sku:'NEW-UI-CODE',name:'NEW UI PRODUCT',costPrice:10,stock:5,lowStockLevel:5});
-  await click(button('Agents & Wallet'));
+  await click(button('Settings'));await click(button('Open Business Setup'));
   await change(document.querySelector('.agent-add input'),'NEW UI AGENT');await change(document.querySelector('.agent-add select'),company.id);
   await click(button('Add Agent'));await waitFor(()=>document.body.textContent.includes('NEW UI AGENT'));
   await click(button('Product Master'));await change(document.querySelector('select'),company.id);await change(document.querySelectorAll('select')[1],'Amazon');

@@ -1,3 +1,9 @@
+import {MASTER_VALUE_FIELDS} from '../../server/masterValues.mjs';
+import ReturnCharges from './ReturnCharges.jsx';
+import MasterChart from './MasterChart.jsx';
+import ProductReturnAnalysis from './ProductReturnAnalysis.jsx';
+import {manualSaleDate} from '../../server/manualSaleDate.mjs';
+import {localToday} from './dashboardStats.js';
 import Settings from './Settings';
 import Banking from './Banking';
 import Purchases from './Purchases';
@@ -76,7 +82,7 @@ function Stat({ label, value, sub, className = "" }) {
   return <Card className={`stat ${className}`.trim()}><div className="stat-label">{label}</div><div className="stat-value">{value}</div>{sub && <div className="muted">{sub}</div>}</Card>;
 }
 
-const NAV_ICON = { dashboard:"dashboard", sales:"scan", purchases:"box", warehouse:"box", master:"link", agents:"wallet", refunds:"refund", settings:"link", banking:"wallet", reports:"sheet" };
+const NAV_ICON = { masterChart:"dashboard", dashboard:"dashboard", sales:"scan", purchases:"box", warehouse:"box", master:"link", agents:"wallet", refunds:"refund", settings:"link", banking:"wallet", reports:"sheet" };
 const PAGE_SUBTITLE = {
   dashboard: "Business performance across companies, marketplaces and inventory.",
   sales: "Scan shipping labels, resolve mappings and record today's sales.",
@@ -135,7 +141,7 @@ export default function App() {
   };
 
   return (
-    <div className={`app${tab === "purchases" ? " app-purchases" : tab === "banking" ? " app-banking" : tab === "settings" ? " app-settings" : ""}`}>
+    <div className={`app${tab === "masterChart" ? " master-chart-active" : tab === "purchases" ? " app-purchases" : tab === "banking" ? " app-banking" : tab === "settings" ? " app-settings" : ""}`}>
       <aside>
         <div className="brand">
           <div className="logo"><img src="/logo.png" alt="" width="26" height="26" /></div>
@@ -144,13 +150,12 @@ export default function App() {
 
         <nav>
           {[
-            ["dashboard","Dashboard"],
+            ["dashboard","Dashboard"],["masterChart","Master Chart"],
             ["sales","Daily Sales"],
             ["purchases","Purchases"],
             ["warehouse","Warehouse"],
             ["master","Product Master"],
-            ["agents","Agents & Wallet"],
-            ["refunds","Refunds"],
+            ["refunds","Refunds"],["returnCharges","Return Charges"],
             ["banking","Banking"],
             ["reports","Reports"],
             ["settings","Settings"]
@@ -174,8 +179,8 @@ export default function App() {
               purchases:"Purchases",
               warehouse:"Warehouse",
               master:"Product Master",
-              agents:"Agents & Wallet",
-              refunds:"Refunds",
+              agents:"Business Setup",
+              refunds:"Refunds",returnCharges:"Return Charges",
               banking:"Banking",
               reports:"Reports",
               settings:"Settings"
@@ -192,6 +197,8 @@ export default function App() {
           <button onClick={() => setTab("agents")}>Add Company</button>
         </Card>}
 
+        {tab === "returnCharges" && <ReturnCharges onSaved={reload}/>}
+        {tab === "masterChart" && <MasterChart state={state} reload={reload} onExitWorkspace={()=>setTab("dashboard")}/>}
         {tab === "dashboard" && <Dashboard state={state} />}
         {tab === "sales" && <Sales state={state} reload={reload} notify={notify} setHealth={setHealth} />}
         {tab === "purchases" && <Purchases state={state} reload={reload} notify={notify} />}
@@ -199,7 +206,7 @@ export default function App() {
         {tab === "master" && <ProductMaster state={state} reload={reload} notify={notify} />}
         {tab === "agents" && <Agents state={state} reload={reload} notify={notify} />}
         {tab === "refunds" && <Refunds state={state} reload={reload} notify={notify} />}
-        {tab === "settings" && <Settings notify={notify} />}
+        {tab === "settings" && <><Card><h3>Business Setup</h3><p>Manage companies, agents and marketplace accounts.</p><button onClick={()=>setTab("agents")}>Open Business Setup</button></Card><Settings notify={notify} /></>}
         {tab === "banking" && <Banking notify={notify} Card={Card} Stat={Stat} Mkt={Mkt} DownloadButton={DownloadButton} />}
         {tab === "reports" && <ReportsPage state={state} notify={notify} onBusinessReset={businessResetCompleted} />}
       </main>
@@ -292,10 +299,12 @@ function Dashboard({ state }) {
       </tr>) : <EmptyRow colSpan="5">Add your first agent.</EmptyRow>}</tbody></table></div>
       <p className="note">Sales Due here is the stock cost of this month's sales only. Payments and the running wallet balance are on Agents &amp; Wallet.</p>
     </Card>
+    <ProductReturnAnalysis state={state} options={{month:shown}}/>
   </>;
 }
 
 function Sales({ state, reload, notify, setHealth }) {
+  const [manualDate,setManualDate]=useState(localToday);
   const activeCompanyIds = new Set(state.companies.filter(c => c.active !== false).map(c => c.id));
   const salesAgents = state.agents.filter(a => a.active !== false && activeCompanyIds.has(a.companyId));
   const [agentId, setAgentId] = useState(salesAgents[0]?.id || "");
@@ -339,11 +348,12 @@ function Sales({ state, reload, notify, setHealth }) {
 
   const manualSave = async () => {
     if (saving) return;
+    try{manualSaleDate(manualDate);}catch(e){notify(e.message);return;}
     setSaving(true);
     try {
-      await api.addSales([{ agentId, accountId, productId, qty:Number(qty), saleAmount:Number(amount || 0), orderId, source:"manual" }]);
+      await api.addSales([{ agentId, accountId, productId, qty:Number(qty), saleAmount:Number(amount || 0), orderId, source:"manual", saleDate:manualDate }]);
       await reload();
-      setOrderId(""); setAmount(""); setQty(1);
+      setOrderId(""); setAmount(""); setQty(1);setManualDate(localToday());
       notify("Sale added and stock deducted.");
     } catch(e) { notify(e.message); }
     finally { setSaving(false); }
@@ -594,6 +604,7 @@ function Sales({ state, reload, notify, setHealth }) {
       <div className="ph"><h3 className="eyebrow dim"><span className="stepn">+</span>Manual Sale</h3><span className="meta">For a sale without a label</span></div>
       <div className="pb">
         <div className="form-grid manual">
+          <label>Sale Date<input type="date" aria-label="Sale Date" required min="0001-01-01" max={localToday()} value={manualDate} onChange={e=>setManualDate(e.target.value)}/></label>
           <label>Agent<select value={agentId} onChange={e=>setAgentId(e.target.value)}>
             <option value="">Select agent</option>{salesAgents.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}
           </select></label>
@@ -612,16 +623,16 @@ function Sales({ state, reload, notify, setHealth }) {
     </Card>
 
     <Card className="flush">
-      <div className="ph"><h3 className="eyebrow"><span className="stepn">3</span>Today's Sales</h3><span className="meta">{state.todaySales.length} sale{state.todaySales.length === 1 ? "" : "s"} · newest first</span>
+      <div className="ph"><h3 className="eyebrow"><span className="stepn">3</span>Saved Sales</h3><span className="meta">{state.todaySales.length} sale{state.todaySales.length === 1 ? "" : "s"} · newest first</span>
         <div className="acts"><button className="ghost sm" onClick={undoLastBatch}><Icon name="refund" size={14}/>Undo Last Batch</button></div>
       </div>
-      <div className="table-wrap"><table><thead><tr><th>Agent</th><th>Account</th><th>Order</th><th>Product</th><th className="n">Qty</th><th className="n">Amount</th><th>Source</th></tr></thead>
+      <div className="table-wrap"><table><thead><tr><th>Sale Date</th><th>Agent</th><th>Account</th><th>Order</th><th>Product</th><th className="n">Qty</th><th className="n">Amount</th><th>Source</th></tr></thead>
       <tbody>{state.todaySales.length ? [...state.todaySales].reverse().map(s=><tr key={s.id}>
-        <td className="strong">{state.agents.find(a=>a.id===s.agentId)?.name}</td>
+        <td>{saleDay(s)}</td><td className="strong">{state.agents.find(a=>a.id===s.agentId)?.name}</td>
         <td className="sub">{state.accounts.find(a=>a.id===s.accountId)?.name}</td>
         <td>{s.orderId ? <span className="code">{s.orderId}</span> : "—"}</td><td>{s.productName}</td><td className="n">{s.qty}</td><td className="n"><Money n={s.saleAmount}/></td>
         <td title={s.source}>{SOURCE_LABEL[s.source] ? <span className="src"><Icon name={SOURCE_LABEL[s.source][0]} size={13}/>{SOURCE_LABEL[s.source][1]}</span> : s.source}</td>
-      </tr>):<EmptyRow colSpan="7">No sales entered today.</EmptyRow>}</tbody></table></div>
+      </tr>):<EmptyRow colSpan="8">No sales entered today.</EmptyRow>}</tbody></table></div>
     </Card>
   </>;
 }
@@ -717,10 +728,12 @@ function ProductMaster({ state, reload, notify }) {
   const [editId,setEditId]=useState("");
   const [editProductId,setEditProductId]=useState("");
   const [editName,setEditName]=useState(true);
+  const blankValues = () => Object.fromEntries(MASTER_VALUE_FIELDS.map(([field]) => [field, ""]));
+  const [editValues,setEditValues]=useState(blankValues);
 
   const saveMapping = async () => {
     try {
-      await api.updateMasterProduct(editId, editProductId, editName);
+      await api.updateMasterProduct(editId, editProductId, editName, editValues);
       setEditId(""); await reload(); notify("Product Master mapping updated.");
     } catch(e){notify(e.message);}
   };
@@ -733,12 +746,13 @@ function ProductMaster({ state, reload, notify }) {
   const [addCode,setAddCode]=useState("");
   const [addSku,setAddSku]=useState("");
   const [addName,setAddName]=useState("");
+  const [addValues,setAddValues]=useState(blankValues);
   const [addError,setAddError]=useState("");
-  const openAdd = () => { setAddCode(""); setAddSku(""); setAddName(""); setAddError(""); setShowAdd(true); };
+  const openAdd = () => { setAddCode(""); setAddSku(""); setAddName(""); setAddValues(blankValues()); setAddError(""); setShowAdd(true); };
   const addProduct = async () => {
     setAddError("");
     try {
-      await api.addMasterProduct({ companyId, marketplace, code: addCode, sku: addSku, name: addName });
+      await api.addMasterProduct({ companyId, marketplace, code: addCode, sku: addSku, name: addName, ...addValues });
       setShowAdd(false); await reload(); notify("Product Master mapping added.");
     } catch(e){ setAddError(e.message); }
   };
@@ -780,7 +794,7 @@ function ProductMaster({ state, reload, notify }) {
       </div>}
       {ready && <>
         <h3 className="sub-h">Product Sheet</h3>
-        <div className="table-wrap"><table><thead><tr><th>Warehouse Product Code</th><th>Marketplace SKU</th><th>Product Name</th><th className="n">Action</th></tr></thead>
+        <div className="table-wrap"><table><thead><tr><th>Warehouse Product Code</th><th>Marketplace SKU</th><th>Product Name</th>{MASTER_VALUE_FIELDS.map(([field,label])=><th key={field}>{label}</th>)}<th className="n">Action</th></tr></thead>
         <tbody>{saved.length ? saved.map(m=>editId===m.id
           ? <tr key={m.id} className="is-editing">
               <td><select value={editProductId} onChange={e=>setEditProductId(e.target.value)}>
@@ -788,6 +802,7 @@ function ProductMaster({ state, reload, notify }) {
               </select></td>
               <td><span className="code">{m.marketplaceSku}</span></td>
               <td><label className="check-label"><input type="checkbox" checked={editName} onChange={e=>setEditName(e.target.checked)}/> Also use the warehouse product name</label></td>
+              {MASTER_VALUE_FIELDS.map(([field,label])=><td key={field}><input aria-label={`Edit ${label}`} type="number" step="0.01" min={field==='estimated_profit'?undefined:0} value={editValues[field]} onChange={e=>setEditValues(v=>({...v,[field]:e.target.value}))}/></td>)}
               <td className="actions"><span className="row-acts">
                 <button className="icon-btn" title="Save" aria-label="Save" onClick={saveMapping}><Icon name="check" size={16}/></button>
                 <button className="icon-btn" title="Cancel" aria-label="Cancel" onClick={()=>setEditId("")}><Icon name="x" size={16}/></button>
@@ -795,11 +810,12 @@ function ProductMaster({ state, reload, notify }) {
             </tr>
           : <tr key={m.id}>
               <td><span className="code">{codeOf(m.productId)}</span></td><td><span className="code">{m.marketplaceSku}</span></td><td>{m.productName}</td>
+              {MASTER_VALUE_FIELDS.map(([field])=><td key={field}>{m[field]===null || m[field]===undefined ? "—" : new Intl.NumberFormat('en-IN',{style:'currency',currency:'INR',minimumFractionDigits:2,maximumFractionDigits:2}).format(m[field])}</td>)}
               <td className="actions"><span className="row-acts">
-                <button className="icon-btn" title="Edit mapping" aria-label="Edit mapping" onClick={()=>{setEditId(m.id); setEditProductId(m.productId); setEditName(true);}}><Icon name="pencil" size={15}/></button>
+                <button className="icon-btn" title="Edit mapping" aria-label="Edit mapping" onClick={()=>{setEditId(m.id); setEditProductId(m.productId); setEditName(true); setEditValues(Object.fromEntries(MASTER_VALUE_FIELDS.map(([field])=>[field,m[field]??""])));}}><Icon name="pencil" size={15}/></button>
                 <button className="icon-btn danger" title="Remove mapping" aria-label="Remove mapping" onClick={()=>removeMapping(m)}><Icon name="trash" size={15}/></button>
               </span></td>
-            </tr>) : <EmptyRow colSpan="4">No Product Master mappings for this company and marketplace yet.</EmptyRow>}</tbody></table></div>
+            </tr>) : <EmptyRow colSpan="8">No Product Master mappings for this company and marketplace yet.</EmptyRow>}</tbody></table></div>
       </>}
       {showAdd && <div className="backdrop" onClick={()=>setShowAdd(false)}>
         <div className="dialog" role="dialog" aria-modal="true" aria-labelledby="pm-add-title" onClick={e=>e.stopPropagation()}>
@@ -812,6 +828,7 @@ function ProductMaster({ state, reload, notify }) {
               <label>Warehouse Product Code<input className="code" value={addCode} onChange={e=>setAddCode(e.target.value)} autoFocus/></label>
               <label>Marketplace SKU<input className="code" value={addSku} onChange={e=>setAddSku(e.target.value)}/></label>
               <label>Product Name<input value={addName} onChange={e=>setAddName(e.target.value)}/></label>
+              {MASTER_VALUE_FIELDS.map(([field,label])=><label key={field}>{label}<input type="number" step="0.01" min={field==='estimated_profit'?undefined:0} value={addValues[field]} onChange={e=>setAddValues(v=>({...v,[field]:e.target.value}))}/></label>)}
             </div>
             {addError && <p className="form-error"><Icon name="error" size={14}/><span>{addError}</span></p>}
           </div>
@@ -919,18 +936,6 @@ function Agents({ state, reload, notify }) {
   const bd = walletPeriod?.error ? {totals:{sales:0,qty:0},byProduct:[],byMarketplace:[],refundCount:0} : walletPeriod?.breakdown;
   const wt = walletPeriod?.error ? {due:0,paid:0,pending:0} : walletPeriod;
 
-  const resetWallet = async agent => {
-    const w = totals(agent.id);
-    const question = `RESET WALLET\n\nAgent: ${agent.name}\nCompany: ${companyOf(agent)}\nCurrent Balance: ${money(w.pending)}\n\n`
-      + `The current wallet will start again from a fresh ₹0 baseline.\n`
-      + `Nothing is deleted: all sales, refunds, payments and history stay saved and visible.\nNew sales and payments will count from now on.\n\nReset this wallet?`;
-    if (!window.confirm(question)) return;
-    try {
-      await api.resetAgentWallet(agent.id);
-      await reload();
-      notify("Wallet reset to ₹0. Previous history has been preserved.");
-    } catch(e){notify(e.message);}
-  };
 
   const addAgent=async()=>{
     try {
@@ -1043,7 +1048,6 @@ function Agents({ state, reload, notify }) {
           {lastReset && <div className="kv-line"><span>Current wallet since reset on <b>{localDateTime(lastReset.resetAt, lastReset.date)}</b> — earlier sales, refunds and payments stay in the history below and in reports.</span></div>}
         </div>
         <div className="acts">
-          <button className="danger sm" title="Start this agent's current wallet again from ₹0 (history is kept)" onClick={()=>resetWallet(viewAgent)}><Icon name="refund" size={14}/>Reset Wallet</button>
           <button className="icon-btn" title="Close" aria-label="Close wallet details" onClick={()=>setViewAgentId("")}><Icon name="x" size={16}/></button>
         </div>
       </div>
@@ -1171,14 +1175,18 @@ function ReportsPage({state,notify,onBusinessReset}) {
 function BackupCard({ notify }) {
   const [info, setInfo] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [backup,setBackup]=useState(null);
+  const pending=useRef(false);
   const load = () => api.backupInfo().then(setInfo).catch(() => {});
   useEffect(() => { load(); }, []);
 
   const backupNow = async () => {
-    setBusy(true);
-    try { const r = await api.backupNow(); notify(`Backup saved: ${r.file}`); await load(); }
+    if(pending.current)return;pending.current=true;setBusy(true);setBackup(null);
+    try { const r=await api.backupNow();
+      if(!r.verified||!r.absolutePath||!(r.bytes>0)||!/^[a-f0-9]{64}$/.test(r.sha256||''))throw Error('The server did not verify the backup. Update/restart SellQuanta and retry.');
+      setBackup(r);notify(`Backup saved and verified: ${r.absolutePath} (${r.bytes} bytes)`);await load(); }
     catch(e) { notify(e.message); }
-    finally { setBusy(false); }
+    finally { pending.current=false;setBusy(false); }
   };
 
   return <Card className="flush">
@@ -1188,6 +1196,8 @@ function BackupCard({ notify }) {
     <div className="pb">
       <p className="muted" style={{margin:"0 0 6px",lineHeight:1.55}}>SellQuanta saves one backup per day automatically in the <b>backups</b> folder and keeps the latest {info?.keepDays ?? 30} days. Everything you enter is stored on this computer only.</p>
       {info && <p className="kv-line" style={{margin:0}}><span>Automatic backups kept: <b>{info.dailyCount}</b></span>{info.newestDaily ? <span>latest: <b>{info.newestDaily}</b></span> : null}<span>Manual backups: <b>{info.manualCount}</b> (in backups/manual)</span></p>}
+      {info?.absolutePath&&<p style={{overflowWrap:'anywhere'}}>Backup folder: {info.absolutePath}</p>}
+      {backup&&<><p role="status" style={{overflowWrap:'anywhere'}}>Backup saved and verified: {backup.absolutePath} ({backup.bytes} bytes)</p><a href={`http://127.0.0.1:8787/api/backup/manual/${encodeURIComponent(backup.file.split('/').pop())}`} download>Save Backup Copy?</a></>}
     </div>
   </Card>;
 }

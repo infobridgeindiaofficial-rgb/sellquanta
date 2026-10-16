@@ -1,0 +1,47 @@
+import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import path from 'node:path';import net from 'node:net';import {spawn} from 'node:child_process';import XLSX from 'xlsx';
+import {prepareStatementImport} from '../server/statementAdapter.mjs';import {applySettlement,bankingReport} from '../server/banking.mjs';import {headers,statementRows} from './fixtures/banking-statements.mjs';
+const root=path.resolve(import.meta.dirname,'..');
+const fixture=()=>({meta:{version:1},companies:[],agents:[],accounts:[],products:[{id:'p',stock:9,costPrice:20}],productMaster:[],todaySales:[{id:'s',marketplace:'Amazon',saleAmount:200,date:'2026-10-01'}],salesHistory:[],ledger:[],refunds:[],stockMovements:[],purchases:[],bankSettlements:[],bankingAudit:[],monthCloseArchive:[],returnCharges:[],future:{preserve:true}});
+const row=(id='t',reference='UTR-A')=>({transaction:{id,date:'2026-10-01',reference,narration:'Amazon payout',creditCents:10000,debitCents:0,sources:[],detection:{marketplace:'Amazon',status:'Confirmed'}},marketplace:'Amazon',classificationSource:'Rule',approved:true});
+const options=(requestId='statement_test_0001')=>({requestId,confirm:true,verificationComplete:true});
+test('statement batches use released create/audit/version rules; replay and cross-channel duplicates cannot change inventory',()=>{
+ const input=fixture(),before=structuredClone(input),first=prepareStatementImport(input,[row()],options());assert.deepEqual(input,before);assert.equal(first.result.saved,1);
+ const saved=first.db.bankSettlements[0];assert.equal(saved.version,1);assert.equal(first.db.bankingAudit[0].action,'create');assert.equal(first.db.bankingAudit[0].after.transactionFingerprint,saved.transactionFingerprint);
+ for(const key of ['products','stockMovements','ledger','refunds','todaySales','purchases','future'])assert.deepEqual(first.db[key],input[key]);
+ assert.equal(prepareStatementImport(first.db,[row()],options()).result.replayed,true);
+ assert.throws(()=>prepareStatementImport(first.db,[row('different','OTHER')],options()),/different details/);
+ assert.equal(prepareStatementImport(first.db,[row()],options('statement_test_0002')).result.saved,0);
+ assert.throws(()=>applySettlement(first.db,'create',null,{requestId:'manual_duplicate_001',marketplace:'Amazon',date:'2026-10-01',amount:'100.00',reference:'UTR-A'}),/already exists/);
+ const correction=applySettlement(first.db,'update',saved.id,{requestId:'correct_statement_001',confirm:true,version:1,marketplace:'Amazon',date:'2026-10-01',amount:'90.00',reference:'UTR-A'});
+ assert.equal(correction.settlement.version,2);assert.equal(bankingReport(first.db,{mode:'all'}).totals.differenceCents,11000);
+ applySettlement(first.db,'delete',saved.id,{requestId:'delete_statement_001',confirm:true,version:2});
+ assert.equal(prepareStatementImport(first.db,[row()],options('statement_test_0003')).result.saved,0,'Deleted statement receipts cannot be resurrected by reimport');
+});
+test('invalid mixed batches, ambiguous references and legacy reversal corrections fail without any mutation',()=>{
+ const input=fixture(),before=structuredClone(input),bad=row('b','UTR-B');bad.transaction.debitCents=100;
+ assert.throws(()=>prepareStatementImport(input,[row(),bad],options()),/debit/);assert.deepEqual(input,before);
+ input.bankSettlements=[{id:'legacy',marketplace:'Amazon',date:'2026-10-01',amountCents:10000,reference:'',createdAt:'2026-10-01',version:1}];
+ assert.throws(()=>prepareStatementImport(input,[row()],options()),/legacy receipt overlap/);
+ input.bankSettlements.push({id:'rev',kind:'receipt_reversal',originalReceiptId:'legacy',amountCents:-10000,marketplace:'Amazon',date:'2026-10-02',createdAt:'2026-10-02',version:1});
+ for(const id of ['legacy','rev'])assert.throws(()=>applySettlement(input,'delete',id,{requestId:'legacy_delete_'+id,confirm:true,version:1}),/reversal pair/);
+ assert.equal(bankingReport(input,{mode:'all'}).totals.receivedCents,0);
+});
+test('HTTP scanner tokens prevent forged amounts; backups, restart, deleted-row reimport and duplicate uploads preserve all other collections',async t=>{
+ const dir=fs.mkdtempSync(path.join(root,'tmp/statement-adapter-'));fs.mkdirSync(path.join(dir,'data'));const file=path.join(dir,'data/stockpilot.json');fs.writeFileSync(file,JSON.stringify(fixture()));const before=structuredClone(fixture());
+ const listener=net.createServer();await new Promise(r=>listener.listen(0,'127.0.0.1',r));const port=listener.address().port;await new Promise(r=>listener.close(r));let child;
+ const request=(route,body)=>fetch(`http://127.0.0.1:${port}/api${route}`,body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{});
+ const start=async()=>{child=spawn(process.execPath,[path.join(root,'server/index.mjs')],{cwd:root,env:{...process.env,PORT:String(port),SELLQUANTA_DATA_ROOT:dir,SELLQUANTA_SKIP_STARTUP_WRITES:'1'},windowsHide:true,stdio:'ignore'});for(let i=0;i<150;i++){try{if((await request('/server-info')).ok)return;}catch{}await new Promise(r=>setTimeout(r,40));}throw Error('Isolated scanner server failed to start.');};
+ const stop=async()=>{if(child?.exitCode===null)await new Promise(r=>{child.once('exit',r);child.kill();});};t.after(stop);await start();
+ const data=statementRows(),wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([headers,...data.rows,data.footer]),'Statement');const input={filename:'synthetic.xlsx',base64:XLSX.write(wb,{type:'base64',bookType:'xlsx'}),useOllama:false};
+ const response=await request('/banking/statement/preview',input);assert.equal(response.status,200);const preview=await response.json();assert.equal(preview.savingEnabled,true,JSON.stringify(preview.warnings));assert.deepEqual(JSON.parse(fs.readFileSync(file)),before);
+ const eligible=preview.rows.filter(r=>r.detection.status==='Confirmed'&&r.detection.marketplace&&!r.debitCents&&r.creditCents>0),selections=eligible.map(r=>({scanToken:preview.scanToken,rowId:r.id,marketplace:r.detection.marketplace,classificationSource:'Rule',approved:true}));assert.ok(selections.length>0);
+ const body={...options('http_statement_0001'),selections};
+ assert.equal((await request('/banking/statement/import',{...body,selections:[{...selections[0],amountCents:1}]})).status,409);
+ assert.equal((await request('/banking/statement/import',{...body,confirm:false})).status,409);
+ const first=await(await request('/banking/statement/import',body)).json();assert.equal(first.saved,selections.length);assert.equal((await(await request('/banking/statement/import',body)).json()).replayed,true);
+ const after=JSON.parse(fs.readFileSync(file));for(const key of Object.keys(before).filter(k=>!['meta','bankSettlements','bankingAudit'].includes(k)))assert.deepEqual(after[key],before[key],key);
+ const backupFiles=fs.readdirSync(path.join(dir,'backups/manual'));assert.equal(backupFiles.length,1);assert.deepEqual(JSON.parse(fs.readFileSync(path.join(dir,'backups/manual',backupFiles[0]))),before);
+ await stop();await start();assert.deepEqual(JSON.parse(fs.readFileSync(file)),after);assert.equal((await request('/banking/statement/import',body)).status,409,'Tokens expire across restart');
+ const next=await(await request('/banking/statement/preview',input)).json();assert.equal(next.rows.filter(r=>r.duplicate).length,eligible.length);
+ const rescanned=eligible.map(r=>({...selections.find(s=>s.rowId===r.id),scanToken:next.scanToken}));const second=await(await request('/banking/statement/import',{...options('http_statement_0002'),selections:rescanned})).json();assert.equal(second.saved,0);assert.equal(second.duplicates,eligible.length);
+});

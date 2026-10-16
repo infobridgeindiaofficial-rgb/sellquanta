@@ -32,6 +32,11 @@ const samePath = (a, b) => !!a && !!b && path.resolve(a).toLowerCase() === path.
 
 // Name first: it decides the userData folder (%APPDATA%\SellQuanta) and the single-instance lock.
 app.setName("SellQuanta");
+// Explicit isolation for validation/portable profiles; default production paths stay unchanged.
+if(process.env.SELLQUANTA_PROFILE_ROOT){
+  if(!process.env.SELLQUANTA_DATA_ROOT)throw Error('An isolated profile requires an explicit business data root.');
+  app.setPath('userData',path.resolve(process.env.SELLQUANTA_PROFILE_ROOT));
+}
 if (process.platform === "win32") app.setAppUserModelId("com.sellquanta.desktop");
 
 const USER_DATA = app.getPath("userData");
@@ -235,6 +240,13 @@ function hardenSession() {
   // Excel exports / templates / backups: saved straight into Downloads like a browser does (never overwriting a file),
   // with a Windows notification; clicking it shows the file in its folder.
   session.defaultSession.on("will-download", (_e, item) => {
+    // Manual backups always offer a native Save dialog instead of hiding a copy in Downloads.
+    const source = new URL(item.getURL());
+    if (source.origin === BACKEND_ORIGIN && source.pathname.startsWith('/api/backup/manual/')) {
+      item.setSaveDialogOptions({title:'Save SellQuanta Backup Copy',defaultPath:path.join(app.getPath('documents'),path.basename(item.getFilename())),filters:[{name:'SellQuanta JSON backup',extensions:['json']}],properties:['showOverwriteConfirmation']});
+      item.once('done',(_event,state)=>log('manual backup copy',state,item.getSavePath()));
+      return;
+    }
     const dir = process.env.SELLQUANTA_DOWNLOAD_DIR || app.getPath("downloads");
     const name = item.getFilename() || "SellQuanta-download";
     const ext = path.extname(name), base = path.basename(name, ext);
@@ -288,6 +300,7 @@ function createWindow() {
       devTools: !app.isPackaged
     }
   });
+  if (process.platform === 'win32' && app.isPackaged) win.setAppDetails({appId:'com.sellquanta.desktop',appIconPath:ICON,appIconIndex:0,relaunchDisplayName:'SellQuanta',relaunchCommand:`"${process.execPath}"`});
   win.once("ready-to-show", () => { win.maximize(); win.show(); });
   win.on("closed", () => { win = null; });
   // If the page itself crashes, reload it (the backend and data are unaffected).

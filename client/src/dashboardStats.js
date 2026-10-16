@@ -16,6 +16,7 @@ const canonicalMarketplace = v => MARKETPLACES.find(m => m.toLowerCase() === Str
 
 // Calendar day of a sale in the user's local time (from its saved timestamp), falling back to the stored date.
 export function saleDay(s) {
+  if(s.source==="manual"&&s.saleDate)return s.saleDate;
   const t = Date.parse(s.createdAt || "");
   if (Number.isFinite(t)) { const d = new Date(t); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; }
   return String(s.date || "").slice(0, 10);
